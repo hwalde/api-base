@@ -96,18 +96,18 @@ public abstract class ApiRequestBuilderBase<B extends ApiRequestBuilderBase<B, R
      * Builds and executes the request with automatic retry logic.
      *
      * @return The API response
-     * @throws ApiClientException if the request fails after all retries
-     * @see ApiClient#sendRequest(ApiRequest)
+     * @throws ApiClient.ApiClientException if the request fails after all retries
+     * @see ApiClient#sendRequestWithExponentialBackoff(ApiRequest)
      */
-    public abstract ApiResponse<R> execute();
+    public abstract ApiResponse<R> executeWithExponentialBackoff();
 
     /**
      * Builds and executes the request without automatic retries.
      *
      * @return The API response
-     * @throws ApiClientException if the request fails
-     * @see ApiClient#sendRequestWithoutExponentialBackoff(ApiRequest)
+     * @throws ApiClient.ApiClientException if the request fails
+     * @see ApiClient#sendRequest(ApiRequest)
      */
-    public abstract ApiResponse<R> executeWithoutExponentialBackoff();
+    public abstract ApiResponse<R> execute();
 
 }

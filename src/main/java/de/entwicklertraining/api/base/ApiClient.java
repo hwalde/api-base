@@ -126,7 +126,7 @@ public abstract class ApiClient {
      * @throws ApiTimeoutException if the request times out or maximum retries are exceeded
      * @throws ApiClientException if there is an error executing the request
      */
-    public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequest(T request) {
+    public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequestWithExponentialBackoff(T request) {
         long startMillis = System.currentTimeMillis();
         Instant startInstant = Instant.ofEpochMilli(startMillis);
 
@@ -166,7 +166,7 @@ public abstract class ApiClient {
      * @throws ApiTimeoutException if the request times out
      * @throws ApiClientException if there is an error executing the request
      */
-    public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequestWithoutExponentialBackoff(T request) {
+    public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequest(T request) {
         long startMillis = System.currentTimeMillis();
         Instant startInstant = Instant.ofEpochMilli(startMillis);
 
