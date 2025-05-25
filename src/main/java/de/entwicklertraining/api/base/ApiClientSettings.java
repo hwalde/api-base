@@ -240,7 +240,19 @@ public final class ApiClientSettings {
      * Builder for creating {@link ApiClientSettings} instances with a fluent API.
      */
     /**
-     * Builder for creating {@link ApiClientSettings} instances with a fluent API.
+     * A builder for creating {@link ApiClientSettings} instances with a fluent API.
+     * This builder allows for easy configuration of client settings with sensible defaults.
+     * 
+     * <p>Example usage:
+     * <pre>
+     * ApiClientSettings settings = ApiClientSettings.builder()
+     *     .maxRetries(5)
+     *     .initialDelayMs(1000)
+     *     .exponentialBase(2.0)
+     *     .useJitter(true)
+     *     .setBearerAuthenticationKey("your-api-key")
+     *     .build();
+     * </pre>
      */
     public static final class Builder {
         private String bearerAuthenticationKey;

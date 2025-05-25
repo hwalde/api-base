@@ -896,55 +896,6 @@ public abstract class ApiClient {
     }
 
     /**
-     * Exception indicating that while the API endpoint returned a technically valid response,
-     * the content of that response cannot be used as expected.
-     * <p>
-     * This exception is used internally to signal cases where:
-     * <ul>
-     *   <li>The HTTP request completed successfully (2xx status code)</li>
-     *   <li>The response body is syntactically valid (e.g., valid JSON/XML)</li>
-     *   <li>But the content is semantically invalid or doesn't meet business requirements</li>
-     * </ul>
-     *
-     * <p>This is different from HTTP error status codes, as it indicates an issue with the
-     * response content rather than the request or server state. It's typically thrown during
-     * response processing, not by the {@code ApiClient} itself.
-     */
-    public static class ApiResponseUnusableException extends RuntimeException {
-        public ApiResponseUnusableException(String message) {
-            super(message);
-        }
-
-        public ApiResponseUnusableException(String message, Throwable cause) {
-            super(message, cause);
-        }
-    }
-
-    /**
-     * Exception indicating that an API operation could not complete within the allowed time.
-     * <p>
-     * This exception is thrown in various timeout scenarios:
-     * <ul>
-     *   <li>When the maximum execution time for a request is exceeded</li>
-     *   <li>When all retry attempts are exhausted</li>
-     *   <li>When a request is explicitly canceled</li>
-     *   <li>When a network timeout occurs during request execution</li>
-     * </ul>
-     *
-     * <p>This is different from {@code HTTP_504_ServerTimeoutException} which specifically
-     * represents an HTTP 504 Gateway Timeout response from the server.
-     */
-    public static class ApiTimeoutException extends RuntimeException {
-        public ApiTimeoutException(String message) {
-            super(message);
-        }
-
-        public ApiTimeoutException(String message, Throwable cause) {
-            super(message, cause);
-        }
-    }
-
-    /**
      * Base exception class for all client-side errors that occur during API operations.
      * <p>
      * This exception is used for errors that occur before a valid HTTP response is received,
@@ -966,6 +917,77 @@ public abstract class ApiClient {
         }
 
         public ApiClientException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
+     * Exception indicating that while the API endpoint returned a technically valid response,
+     * the content of that response cannot be used as expected.
+     * <p>
+     * This exception is used internally to signal cases where:
+     * <ul>
+     *   <li>The HTTP request completed successfully (2xx status code)</li>
+     *   <li>The response body is syntactically valid (e.g., valid JSON/XML)</li>
+     *   <li>But the content is semantically invalid or doesn't meet business requirements</li>
+     * </ul>
+     *
+     * <p>This is different from HTTP error status codes, as it indicates an issue with the
+     * response content rather than the request or server state. It's typically thrown during
+     * response processing, not by the {@code ApiClient} itself.
+     */
+    public static class ApiResponseUnusableException extends ApiClientException {
+        /**
+         * Creates a new ApiResponseUnusableException with the specified detail message.
+         *
+         * @param message the detail message (which is saved for later retrieval by the getMessage() method)
+         */
+        public ApiResponseUnusableException(String message) {
+            super(message);
+        }
+
+        /**
+         * Creates a new ApiResponseUnusableException with the specified detail message and cause.
+         *
+         * @param message the detail message (which is saved for later retrieval by the getMessage() method)
+         * @param cause the cause (which is saved for later retrieval by the getCause() method)
+         */
+        public ApiResponseUnusableException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
+     * Exception indicating that an API operation could not complete within the allowed time.
+     * <p>
+     * This exception is thrown in various timeout scenarios:
+     * <ul>
+     *   <li>When the maximum execution time for a request is exceeded</li>
+     *   <li>When all retry attempts are exhausted</li>
+     *   <li>When a request is explicitly canceled</li>
+     *   <li>When a network timeout occurs during request execution</li>
+     * </ul>
+     *
+     * <p>This is different from {@code HTTP_504_ServerTimeoutException} which specifically
+     * represents an HTTP 504 Gateway Timeout response from the server.
+     */
+    public static class ApiTimeoutException extends ApiClientException {
+        /**
+         * Creates a new ApiTimeoutException with the specified detail message.
+         *
+         * @param message the detail message (which is saved for later retrieval by the getMessage() method)
+         */
+        public ApiTimeoutException(String message) {
+            super(message);
+        }
+
+        /**
+         * Creates a new ApiTimeoutException with the specified detail message and cause.
+         *
+         * @param message the detail message (which is saved for later retrieval by the getMessage() method)
+         * @param cause the cause (which is saved for later retrieval by the getCause() method)
+         */
+        public ApiTimeoutException(String message, Throwable cause) {
             super(message, cause);
         }
     }
