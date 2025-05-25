@@ -13,7 +13,7 @@ import java.util.function.Supplier;
  *
  * <p>Subclasses must implement the following methods:
  * <ul>
- *   <li>{@link #getUri()} - The target endpoint URL</li>
+ *   <li>{@link #getRelativeUrl()} - The relative endpoint path</li>
  *   <li>{@link #getHttpMethod()} - The HTTP method (e.g., "GET", "POST")</li>
  *   <li>{@link #getBody()} - The request payload (e.g., JSON string)</li>
  *   <li>{@link #createResponse(String)} - Factory method for response objects</li>
@@ -112,12 +112,13 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
     }
 
     /**
-     * Gets the target URI for this API request.
+     * Gets the relative URL path for this API request.
+     * This should include the path and any query parameters, but not the base URL.
      *
-     * @return The complete request URI including protocol, host, path, and query parameters
-     * @implSpec Must be implemented by subclasses to provide the target endpoint
+     * @return The relative URL path (e.g., "/api/resource?param=value")
+     * @implSpec Must be implemented by subclasses to provide the endpoint path
      */
-    public abstract String getUri();
+    public abstract String getRelativeUrl();
 
     /**
      * Gets the HTTP method for this request.

@@ -1,5 +1,8 @@
 package de.entwicklertraining.api.base;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -11,16 +14,22 @@ import java.util.Map;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.Optional;
 
 /**
  * Abstract base class for a generic API client with
  * standard HTTP requests and exponential backoff retry mechanism.
  *
- * This class does not contain specific logic for a particular service.
+ * <p>This class does not contain specific logic for a particular service.
  * Concrete clients (e.g., "GeminiClient") inherit and can
  * use 'registerStatusCodeException' for error handling.
+ *
+ * <p>Subclasses should call {@link #setBaseUrl(String)} in their constructor
+ * to set the base URL for all API requests and register
+ * status code with {@link #registerStatusCodeException(int, Class, String, boolean)}.
  */
 public abstract class ApiClient {
+    private static final Logger logger = LoggerFactory.getLogger(ApiClient.class.getName());
 
     // Nun Virtual Threads für den HttpClient
     private static final ExecutorService HTTP_CLIENT_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
@@ -30,6 +39,8 @@ public abstract class ApiClient {
 
     protected final HttpClient httpClient;
     private final ApiClientSettings settings;
+    private Optional<String> baseUrl = Optional.empty();
+    private boolean statusCodeExceptionsWarningLogged = false;
 
     protected static final class StatusCodeExceptionRegistration {
         final Class<? extends RuntimeException> exceptionClass;
@@ -48,6 +59,34 @@ public abstract class ApiClient {
     }
 
     private final Map<Integer, StatusCodeExceptionRegistration> statusCodeExceptions = new HashMap<>();
+
+    /**
+     * Gets the base URL for all API requests (e.g., "https://api.example.com").
+     * This should include the protocol (http/https) and domain, but no trailing slash.
+     *
+     * @return The base URL as a string
+     * @throws IllegalStateException if the base URL has not been set
+     */
+    protected String getBaseUrl() {
+        return baseUrl.orElseThrow(() -> new IllegalStateException(
+            "Base URL has not been set. Call setBaseUrl() in the constructor of your client implementation."));
+    }
+
+    /**
+     * Sets the base URL for all API requests.
+     * This method should be called in the constructor of the implementing class.
+     *
+     * @param baseUrl The base URL (e.g., "https://api.example.com")
+     * @throws IllegalArgumentException if the baseUrl is null or empty
+     */
+    protected final void setBaseUrl(String baseUrl) {
+        if (baseUrl == null || baseUrl.trim().isEmpty()) {
+            throw new IllegalArgumentException("Base URL cannot be null or empty");
+        }
+        // Ensure the base URL doesn't end with a slash
+        this.baseUrl = Optional.of(baseUrl.endsWith("/") ? 
+            baseUrl.substring(0, baseUrl.length() - 1) : baseUrl);
+    }
 
     protected ApiClient(ApiClientSettings settings) {
         // HttpClient an Virtual-Thread-Executor binden:
@@ -172,8 +211,17 @@ public abstract class ApiClient {
      */
     protected <T extends ApiRequest<U>, U extends ApiResponse<T>> U runRequest(T request,
                                                                                ApiRequestExecutionContext<T, U> context) {
+        // Check if any status code exceptions are registered
+        if (statusCodeExceptions.isEmpty() && !statusCodeExceptionsWarningLogged) {
+            logger.warn("No status code exceptions registered. It's recommended to register " +
+                "appropriate status code exceptions in the constructor of your client implementation " +
+                "using registerStatusCodeException().");
+            statusCodeExceptionsWarningLogged = true;
+        }
+
+        String fullUrl = getBaseUrl() + request.getRelativeUrl();
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(request.getUri()))
+                .uri(URI.create(fullUrl))
                 .header("Content-Type", request.getContentType());
 
         if (this.settings.getBearerAuthenticationKey().isPresent()) {
@@ -758,7 +806,7 @@ public abstract class ApiClient {
     }
 
     // ---------------------------------------
-    // Hilfsmethode, um das Capture abzulegen
+    // Helper method for capturing data
     // ---------------------------------------
     private <T extends ApiRequest<U>, U extends ApiResponse<T>> void storeCaptureData(
             T request,
