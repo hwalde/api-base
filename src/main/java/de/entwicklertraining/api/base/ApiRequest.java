@@ -50,6 +50,14 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
     /** Supplier to check if the request has been canceled */
     private final Supplier<Boolean> isCanceledSupplier;
 
+    /**
+     * Constructs a new ApiRequest using the provided builder.
+     * <p>
+     * This constructor is protected and should only be called by subclasses.
+     * It initializes the request with settings from the builder.
+     *
+     * @param builderBase The builder containing the request configuration
+     */
     protected ApiRequest(ApiRequestBuilderBase<?, ?> builderBase) {
         this.maxExecutionTimeInSeconds = builderBase.maxExecutionTimeInSeconds;
         this.captureOnSuccess = builderBase.captureOnSuccess;
@@ -116,7 +124,8 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
      * This should include the path and any query parameters, but not the base URL.
      *
      * @return The relative URL path (e.g., "/api/resource?param=value")
-     * @implSpec Must be implemented by subclasses to provide the endpoint path
+     * <p>
+     * Implementation note: Must be implemented by subclasses to provide the endpoint path
      */
     public abstract String getRelativeUrl();
 
@@ -124,7 +133,8 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
      * Gets the HTTP method for this request.
      *
      * @return The HTTP method as a string (e.g., "GET", "POST", "PUT", "DELETE")
-     * @implSpec Must be implemented by subclasses to specify the HTTP method
+     * <p>
+     * Implementation note: Must be implemented by subclasses to specify the HTTP method
      */
     public abstract String getHttpMethod();
 
@@ -132,8 +142,9 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
      * Gets the request body content.
      *
      * @return The request body as a string (e.g., JSON), or null for requests without a body
-     * @implSpec Must be implemented by subclasses for requests that include a body.
-     *           For binary content, override {@link #getBodyBytes()} instead.
+     * <p>
+     * Implementation note: Must be implemented by subclasses for requests that include a body.
+     * For binary content, override {@link #getBodyBytes()} instead.
      */
     public abstract String getBody();
 
@@ -142,9 +153,11 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
      *
      * @param responseBody The raw response body as received from the server
      * @return A new response object of type R
-     * @throws Exception if the response cannot be parsed or is invalid
-     * @implSpec Must be implemented by subclasses to parse the response body
-     *           and return an appropriate response object.
+     * @throws RuntimeException if the response cannot be parsed or is invalid
+     * <p>
+     * Implementation note: Must be implemented by subclasses to parse the response body
+     * and return an appropriate response object. Subclasses should throw specific runtime
+     * exceptions to indicate different types of parsing or validation errors.
      */
     public abstract R createResponse(String responseBody);
 
@@ -152,8 +165,9 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
      * Indicates whether this request expects a binary response.
      *
      * @return true if the response should be treated as binary data, false for text
-     * @implNote The default implementation returns false. Override this method
-     *           and return true for binary responses (e.g., file downloads).
+     * <p>
+     * Note: The default implementation returns false. Override this method
+     * to return true for binary responses (e.g., file downloads).
      */
     public boolean isBinaryResponse() {
         return false;
@@ -165,8 +179,9 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
      * @param responseBytes The raw binary response data
      * @return A new response object of type R
      * @throws UnsupportedOperationException if binary responses are not supported
-     * @implNote Override this method to handle binary responses. The default implementation
-     *           throws UnsupportedOperationException.
+     * <p>
+     * Note: Override this method to handle binary responses. The default implementation
+     * throws UnsupportedOperationException.
      */
     public R createResponse(byte[] responseBytes) {
         throw new UnsupportedOperationException("This request doesn't support binary responses.");
@@ -176,8 +191,9 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
      * Gets the Content-Type header value for this request.
      *
      * @return The content type (defaults to "application/json")
-     * @implNote Override this method to specify a different content type
-     *           (e.g., "application/x-www-form-urlencoded" or "multipart/form-data").
+     * <p>
+     * Note: Override this method to specify a different content type
+     * (e.g., "application/x-www-form-urlencoded" or "multipart/form-data").
      */
     public String getContentType() {
         return "application/json";
@@ -188,8 +204,9 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
      *
      * @return The request body as a byte array
      * @throws UnsupportedOperationException if binary request bodies are not supported
-     * @implNote Override this method to provide binary request data. The default
-     *           implementation throws UnsupportedOperationException.
+     * <p>
+     * Note: Override this method to provide binary request data. The default
+     * implementation throws UnsupportedOperationException.
      */
     public byte[] getBodyBytes() {
         throw new UnsupportedOperationException("No binary body by default.");

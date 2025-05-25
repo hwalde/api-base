@@ -37,11 +37,18 @@ public abstract class ApiClient {
     // Auch der Cancel-Watcher läuft in virtuellen Threads
     private static final ExecutorService CANCEL_WATCHER_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
+    /** The HTTP client used to execute requests */
     protected final HttpClient httpClient;
     private final ApiClientSettings settings;
     private Optional<String> baseUrl = Optional.empty();
     private boolean statusCodeExceptionsWarningLogged = false;
 
+    /**
+     * Internal class for registering custom exceptions for specific HTTP status codes.
+     */
+    /**
+     * Internal class for registering custom exceptions for specific HTTP status codes.
+     */
     protected static final class StatusCodeExceptionRegistration {
         final Class<? extends RuntimeException> exceptionClass;
         final String message;
@@ -88,6 +95,12 @@ public abstract class ApiClient {
             baseUrl.substring(0, baseUrl.length() - 1) : baseUrl);
     }
 
+    /**
+     * Creates a new ApiClient with the specified settings.
+     *
+     * @param settings The settings to use for this client
+     * @throws NullPointerException if settings is null
+     */
     protected ApiClient(ApiClientSettings settings) {
         // HttpClient an Virtual-Thread-Executor binden:
         this.httpClient = HttpClient.newBuilder()
@@ -387,7 +400,7 @@ public abstract class ApiClient {
                 long remainingMs = maxDurationMs - elapsedMs;
 
                 if (maxDurationMs > 0 && remainingMs <= 0) {
-                    throw createTimeoutException(maxDurationSeconds, latestReason, latestException);
+                    throw createTimeoutException(latestReason, maxDurationSeconds, latestException);
                 }
 
                 return executeWithTimeout(operation, remainingMs);
@@ -408,7 +421,7 @@ public abstract class ApiClient {
             long elapsedMs = System.currentTimeMillis() - startTimeMs;
             long remainingMs = maxDurationMs - elapsedMs;
             if (maxDurationMs > 0 && remainingMs <= 0) {
-                throw createTimeoutException(maxDurationSeconds, latestReason, latestException);
+                throw createTimeoutException(latestReason, maxDurationSeconds, latestException);
             }
 
             long durationOfNextSleep = calculateNextSleep(settings.getInitialDelayMs());
@@ -463,6 +476,12 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Calculates the next sleep duration using exponential backoff.
+     *
+     * @param currentDelay The current delay in milliseconds
+     * @return The next delay in milliseconds
+     */
     protected long calculateNextSleep(long currentDelay) {
         double factor = settings.getExponentialBase();
         if (settings.isUseJitter()) {
@@ -471,6 +490,14 @@ public abstract class ApiClient {
         return (long) (currentDelay * factor);
     }
 
+    /**
+     * Adjusts the sleep duration for the final retry attempt to respect the maximum execution time.
+     *
+     * @param maxDurationSeconds Maximum allowed duration in seconds
+     * @param delayMs The calculated delay in milliseconds
+     * @param remainingMs Remaining time in milliseconds
+     * @return The adjusted sleep duration in milliseconds
+     */
     protected long maybeAdjustSleepForFinalRetry(int maxDurationSeconds, long delayMs, long remainingMs) {
         if (maxDurationSeconds == 0) { // feature is only relevant if there is a maximum execution time
             return delayMs;
@@ -489,6 +516,8 @@ public abstract class ApiClient {
 
     /**
      * Sleeps for 'delayMs', in case there is enough time left.
+     * @param delayMs The time to sleep, in milliseconds
+     * @param remainingMs The time remaining before the request times out, in milliseconds
      */
     protected void applySleep(long delayMs, long remainingMs) {
         if (remainingMs > 0 && delayMs > remainingMs) {
@@ -506,9 +535,17 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Creates a new ApiTimeoutException with details about the timeout.
+     *
+     * @param reason The reason for the timeout
+     * @param maxDurationSeconds The maximum duration that was allowed
+     * @param cause The cause of the timeout
+     * @return A new ApiTimeoutException instance
+     */
     protected ApiTimeoutException createTimeoutException(
-            int maxDurationSeconds,
             String reason,
+            int maxDurationSeconds,
             Throwable cause
     ) {
         String msg = "Maximum execution time of " + maxDurationSeconds + "s reached!";
@@ -516,6 +553,13 @@ public abstract class ApiClient {
         return new ApiTimeoutException(msg, cause);
     }
 
+    /**
+     * Creates a new ApiTimeoutException indicating that all retry attempts were exhausted.
+     *
+     * @param reason The reason for the failure
+     * @param cause The cause of the failure
+     * @return A new ApiTimeoutException instance
+     */
     protected ApiTimeoutException createRetriesExhaustedException(
             String reason,
             Throwable cause
@@ -549,22 +593,44 @@ public abstract class ApiClient {
             Quota
         }
 
+        /** The type of rate limit that was exceeded */
         private ExceptionType type;
 
+        /**
+         * Creates a new HTTP 429 Too Many Requests exception.
+         *
+         * @param message The detail message
+         */
         public HTTP_429_RateLimitOrQuotaException(String message) {
             super(message);
             this.type = ExceptionType.Unknown;
         }
 
+        /**
+         * Creates a new HTTP 429 Too Many Requests exception with the specified cause.
+         *
+         * @param message The detail message
+         * @param cause The cause of the exception
+         */
         public HTTP_429_RateLimitOrQuotaException(String message, Throwable cause) {
             super(message, cause);
             this.type = ExceptionType.RateLimit;
         }
 
+        /**
+         * Sets the type of rate limit that was exceeded.
+         *
+         * @param type The type of rate limit that was exceeded
+         */
         public void setType(ExceptionType type) {
             this.type = type;
         }
 
+        /**
+         * Gets the type of rate limit that was exceeded.
+         *
+         * @return The type of rate limit that was exceeded
+         */
         public ExceptionType getType() {
             return type;
         }
@@ -578,10 +644,21 @@ public abstract class ApiClient {
      * invalid request message framing, or deceptive request routing).
      */
     public static class HTTP_400_RequestRejectedException extends RuntimeException {
+        /**
+         * Creates a new HTTP 400 Bad Request exception.
+         *
+         * @param message The detail message
+         */
         public HTTP_400_RequestRejectedException(String message) {
             super(message);
         }
 
+        /**
+         * Creates a new HTTP 400 Bad Request exception with the specified cause.
+         *
+         * @param message The detail message
+         * @param cause The cause of the exception
+         */
         public HTTP_400_RequestRejectedException(String message, Throwable cause) {
             super(message, cause);
         }
@@ -595,10 +672,21 @@ public abstract class ApiClient {
      * MUST send a WWW-Authenticate header field containing at least one challenge.
      */
     public static class HTTP_401_AuthorizationException extends RuntimeException {
+        /**
+         * Creates a new HTTP 401 Unauthorized exception.
+         *
+         * @param message The detail message
+         */
         public HTTP_401_AuthorizationException(String message) {
             super(message);
         }
 
+        /**
+         * Creates a new HTTP 401 Unauthorized exception with the specified cause.
+         *
+         * @param message The detail message
+         * @param cause The cause of the exception
+         */
         public HTTP_401_AuthorizationException(String message, Throwable cause) {
             super(message, cause);
         }
@@ -613,10 +701,21 @@ public abstract class ApiClient {
      * insufficient funds or requires a subscription upgrade.
      */
     public static class HTTP_402_PaymentRequiredException extends RuntimeException {
+        /**
+         * Creates a new HTTP 402 Payment Required exception.
+         *
+         * @param message The detail message
+         */
         public HTTP_402_PaymentRequiredException(String message) {
             super(message);
         }
 
+        /**
+         * Creates a new HTTP 402 Payment Required exception with the specified cause.
+         *
+         * @param message The detail message
+         * @param cause The cause of the exception
+         */
         public HTTP_402_PaymentRequiredException(String message, Throwable cause) {
             super(message, cause);
         }
@@ -632,10 +731,21 @@ public abstract class ApiClient {
      * permission to access the requested resource.
      */
     public static class HTTP_403_PermissionDeniedException extends RuntimeException {
+        /**
+         * Creates a new HTTP 403 Forbidden exception.
+         *
+         * @param message The detail message
+         */
         public HTTP_403_PermissionDeniedException(String message) {
             super(message);
         }
 
+        /**
+         * Creates a new HTTP 403 Forbidden exception with the specified cause.
+         *
+         * @param message The detail message
+         * @param cause The cause of the exception
+         */
         public HTTP_403_PermissionDeniedException(String message, Throwable cause) {
             super(message, cause);
         }
@@ -650,10 +760,21 @@ public abstract class ApiClient {
      * explicit cache controls.
      */
     public static class HTTP_404_NotFoundException extends RuntimeException {
+        /**
+         * Creates a new HTTP 404 Not Found exception.
+         *
+         * @param message The detail message
+         */
         public HTTP_404_NotFoundException(String message) {
             super(message);
         }
 
+        /**
+         * Creates a new HTTP 404 Not Found exception with the specified cause.
+         *
+         * @param message The detail message
+         * @param cause The cause of the exception
+         */
         public HTTP_404_NotFoundException(String message, Throwable cause) {
             super(message, cause);
         }
@@ -668,10 +789,21 @@ public abstract class ApiClient {
      * errors where the request is well-formed but contains semantic errors.
      */
     public static class HTTP_422_UnprocessableEntityException extends RuntimeException {
+        /**
+         * Creates a new HTTP 422 Unprocessable Entity exception.
+         *
+         * @param message The detail message
+         */
         public HTTP_422_UnprocessableEntityException(String message) {
             super(message);
         }
 
+        /**
+         * Creates a new HTTP 422 Unprocessable Entity exception with the specified cause.
+         *
+         * @param message The detail message
+         * @param cause The cause of the exception
+         */
         public HTTP_422_UnprocessableEntityException(String message, Throwable cause) {
             super(message, cause);
         }
@@ -685,10 +817,21 @@ public abstract class ApiClient {
      * response when the server encounters an error that doesn't fit other status codes.
      */
     public static class HTTP_500_ServerErrorException extends RuntimeException {
+        /**
+         * Creates a new HTTP 500 Internal Server Error exception.
+         *
+         * @param message The detail message
+         */
         public HTTP_500_ServerErrorException(String message) {
             super(message);
         }
 
+        /**
+         * Creates a new HTTP 500 Internal Server Error exception with the specified cause.
+         *
+         * @param message The detail message
+         * @param cause The cause of the exception
+         */
         public HTTP_500_ServerErrorException(String message, Throwable cause) {
             super(message, cause);
         }
@@ -703,10 +846,21 @@ public abstract class ApiClient {
      * suggest an appropriate amount of time for the client to wait before retrying.
      */
     public static class HTTP_503_ServerUnavailableException extends RuntimeException {
+        /**
+         * Creates a new HTTP 503 Service Unavailable exception.
+         *
+         * @param message The detail message
+         */
         public HTTP_503_ServerUnavailableException(String message) {
             super(message);
         }
 
+        /**
+         * Creates a new HTTP 503 Service Unavailable exception with the specified cause.
+         *
+         * @param message The detail message
+         * @param cause The cause of the exception
+         */
         public HTTP_503_ServerUnavailableException(String message, Throwable cause) {
             super(message, cause);
         }
@@ -721,10 +875,21 @@ public abstract class ApiClient {
      * issue between servers rather than a problem with the client's request.
      */
     public static class HTTP_504_ServerTimeoutException extends RuntimeException {
+        /**
+         * Creates a new HTTP 504 Gateway Timeout exception.
+         *
+         * @param message The detail message
+         */
         public HTTP_504_ServerTimeoutException(String message) {
             super(message);
         }
 
+        /**
+         * Creates a new HTTP 504 Gateway Timeout exception with the specified cause.
+         *
+         * @param message The detail message
+         * @param cause The cause of the exception
+         */
         public HTTP_504_ServerTimeoutException(String message, Throwable cause) {
             super(message, cause);
         }

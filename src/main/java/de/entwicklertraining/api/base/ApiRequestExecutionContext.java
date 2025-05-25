@@ -14,6 +14,16 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class ApiRequestExecutionContext<T extends ApiRequest<U>, U extends ApiResponse<T>> {
 
+    /**
+     * Creates a new ApiRequestExecutionContext with default values.
+     * <p>
+     * All fields are initialized to null and should be set using the
+     * appropriate setter methods before use.
+     */
+    public ApiRequestExecutionContext() {
+        // Default constructor with no initialization
+    }
+
     /** The response body as a string, if the response is text-based */
     private String responseBody;
     

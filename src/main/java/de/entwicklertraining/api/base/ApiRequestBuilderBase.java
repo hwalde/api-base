@@ -48,7 +48,14 @@ public abstract class ApiRequestBuilderBase<B extends ApiRequestBuilderBase<B, R
     }
 
     /**
-     * Aktiviert das Datenspeichern im Erfolgsfall (kein Exception-Abbruch).
+     * Enables capturing of request and response data when a request succeeds.
+     * <p>
+     * The provided consumer will be called with an {@link ApiCallCaptureInput} object
+     * containing details about the successful request and its response.
+     *
+     * @param onSuccessConsumer Consumer that will receive the captured success data
+     * @return This builder instance for method chaining
+     * @see ApiCallCaptureInput
      */
     @SuppressWarnings("unchecked")
     public B captureOnSuccess(Consumer<ApiCallCaptureInput> onSuccessConsumer) {

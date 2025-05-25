@@ -150,7 +150,7 @@ public final class ApiClientSettings {
      *
      * @param exponentialBase The base value (must be > 1.0)
      * @return This instance for method chaining
-     * @throws IllegalArgumentException if exponentialBase is <= 1.0
+     * @throws IllegalArgumentException if exponentialBase is lower or equal to 1.0
      */
     public ApiClientSettings setExponentialBase(double exponentialBase) {
         this.exponentialBase = exponentialBase;
@@ -214,7 +214,7 @@ public final class ApiClientSettings {
      *
      * @param seconds Maximum execution time in seconds (must be > 0)
      * @return This instance for method chaining
-     * @throws IllegalArgumentException if seconds <= 0
+     * @throws IllegalArgumentException if seconds lower or equal 0
      */
     public ApiClientSettings setMaxExecutionTimeForFinalRetryInSeconds(int seconds) {
         this.maxExecutionTimeForFinalRetryInSeconds = seconds;
@@ -236,54 +236,104 @@ public final class ApiClientSettings {
      * Builder for creating immutable ApiClientSettings instances.
      * Provides a fluent API for configuration with sensible defaults.
      */
+    /**
+     * Builder for creating {@link ApiClientSettings} instances with a fluent API.
+     */
+    /**
+     * Builder for creating {@link ApiClientSettings} instances with a fluent API.
+     */
     public static final class Builder {
+        private String bearerAuthenticationKey;
         private int maxRetries = 10;
         private long initialDelayMs = 1000;
         private double exponentialBase = 2.0;
         private boolean useJitter = true;
         private int minSleepDurationForFinalRetryInSeconds = 500;
         private int maxExecutionTimeForFinalRetryInSeconds = 60;
-        private String bearerAuthenticationKey;
 
-        public Builder() {
-            // default values are set above
-        }
-
+        /**
+         * Sets the Bearer authentication key for API requests.
+         *
+         * @param key The Bearer token to use for authentication
+         * @return This builder for method chaining
+         */
         public Builder setBearerAuthenticationKey(String key) {
             this.bearerAuthenticationKey = key;
             return this;
         }
 
+        /**
+         * Sets the maximum number of retry attempts for failed requests.
+         *
+         * @param maxRetries The maximum number of retry attempts
+         * @return This builder for method chaining
+         */
         public Builder maxRetries(int maxRetries) {
             this.maxRetries = maxRetries;
             return this;
         }
 
+        /**
+         * Sets the initial delay in milliseconds before the first retry attempt.
+         *
+         * @param initialDelayMs The initial delay in milliseconds
+         * @return This builder for method chaining
+         */
         public Builder initialDelayMs(long initialDelayMs) {
             this.initialDelayMs = initialDelayMs;
             return this;
         }
 
+        /**
+         * Sets the base value used for exponential backoff between retry attempts.
+         *
+         * @param exponentialBase The base value for exponential backoff
+         * @return This builder for method chaining
+         */
         public Builder exponentialBase(double exponentialBase) {
             this.exponentialBase = exponentialBase;
             return this;
         }
 
+        /**
+         * Enables or disables jitter in the retry delay calculation.
+         *
+         * @param useJitter Whether to use jitter in delay calculations
+         * @return This builder for method chaining
+         */
         public Builder useJitter(boolean useJitter) {
             this.useJitter = useJitter;
             return this;
         }
 
+        /**
+         * Sets the minimum sleep duration in seconds for the final retry attempt.
+         *
+         * @param seconds The minimum sleep duration in seconds
+         * @return This builder for method chaining
+         */
         public Builder minSleepDurationForFinalRetryInSeconds(int seconds) {
             this.minSleepDurationForFinalRetryInSeconds = seconds;
             return this;
         }
 
+        /**
+         * Sets the maximum execution time in seconds for the final retry attempt.
+         *
+         * @param seconds The maximum execution time in seconds
+         * @return This builder for method chaining
+         */
         public Builder maxExecutionTimeForFinalRetryInSeconds(int seconds) {
             this.maxExecutionTimeForFinalRetryInSeconds = seconds;
             return this;
         }
 
+        /**
+         * Builds a new {@link ApiClientSettings} instance with the configured settings.
+         *
+         * @return A new {@link ApiClientSettings} instance
+         * @throws IllegalStateException if the configuration is invalid
+         */
         public ApiClientSettings build() {
             return new ApiClientSettings(this);
         }

@@ -37,6 +37,7 @@
   </scm>
 
   <properties>
+    <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <junit.version>5.10.2</junit.version>
     <javafx.version>24.0.1</javafx.version>
@@ -133,10 +134,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
-        <configuration>
-          <source>21</source>
-          <target>21</target>
-        </configuration>
+        <version>3.13.0</version>
       </plugin>
     </plugins>
   </build>
