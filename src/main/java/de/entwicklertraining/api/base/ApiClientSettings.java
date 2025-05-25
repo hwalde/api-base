@@ -1,6 +1,7 @@
 package de.entwicklertraining.api.base;
 
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Configuration settings for API client behavior including retry logic, backoff strategy, and authentication.
@@ -23,27 +24,33 @@ public final class ApiClientSettings {
 
     /** Maximum number of retry attempts for failed requests */
     private int maxRetries = 10;
-    
+
     /** Initial delay before first retry in milliseconds */
     private long initialDelayMs = 1000; // 1 second
-    
+
     /** Base multiplier for exponential backoff calculation */
     private double exponentialBase = 2.0;
-    
+
     /** Whether to add random jitter to backoff delays to prevent thundering herd */
     private boolean useJitter = true;
 
-    /** 
+    /**
      * Minimum time in milliseconds remaining before timeout to attempt a final retry.
      * This allows for one last attempt if there's enough time left.
      */
     private int minSleepDurationForFinalRetryInSeconds = 500;
-    
-    /** 
+
+    /**
      * Maximum execution time in seconds to allow for the final retry attempt.
      * This ensures the final retry has enough time to complete.
      */
     private int maxExecutionTimeForFinalRetryInSeconds = 60;
+
+    /**
+     * Executes the consumer before sending the request
+     * (at the beginning of the client.sendRequest*-methods).
+     */
+    private Consumer<ApiRequest<?>> beforeSendAction;
 
     /**
      * Creates a new instance with default settings.
@@ -66,6 +73,7 @@ public final class ApiClientSettings {
         this.useJitter = builder.useJitter;
         this.minSleepDurationForFinalRetryInSeconds = builder.minSleepDurationForFinalRetryInSeconds;
         this.maxExecutionTimeForFinalRetryInSeconds = builder.maxExecutionTimeForFinalRetryInSeconds;
+        this.beforeSendAction = builder.beforeSendAction;
     }
 
     /**
@@ -81,7 +89,8 @@ public final class ApiClientSettings {
                 .exponentialBase(this.exponentialBase)
                 .useJitter(this.useJitter)
                 .minSleepDurationForFinalRetryInSeconds(this.minSleepDurationForFinalRetryInSeconds)
-                .maxExecutionTimeForFinalRetryInSeconds(this.maxExecutionTimeForFinalRetryInSeconds);
+                .maxExecutionTimeForFinalRetryInSeconds(this.maxExecutionTimeForFinalRetryInSeconds)
+                .beforeSend(this.beforeSendAction);
     }
 
     // --- GETTERS & FLUENT SETTERS ---
@@ -209,6 +218,15 @@ public final class ApiClientSettings {
     }
 
     /**
+     * Gets the action to be executed before sending the request.
+     *
+     * @return The action to be executed before sending the request
+     */
+    public Consumer<ApiRequest<?>> getBeforeSendAction() {
+        return beforeSendAction;
+    }
+
+    /**
      * Sets the maximum execution time allowed for the final retry attempt.
      * This ensures the final retry has sufficient time to complete.
      *
@@ -235,7 +253,7 @@ public final class ApiClientSettings {
     /**
      * A builder for creating {@link ApiClientSettings} instances with a fluent API.
      * This builder allows for easy configuration of client settings with sensible defaults.
-     * 
+     *
      * <p>Example usage:
      * <pre>
      * ApiClientSettings settings = ApiClientSettings.builder()
@@ -255,6 +273,7 @@ public final class ApiClientSettings {
         private boolean useJitter = true;
         private int minSleepDurationForFinalRetryInSeconds = 500;
         private int maxExecutionTimeForFinalRetryInSeconds = 60;
+        private Consumer<ApiRequest<?>> beforeSendAction;
 
         /**
          * Creates a new Builder instance with default settings.
@@ -335,6 +354,17 @@ public final class ApiClientSettings {
          */
         public Builder maxExecutionTimeForFinalRetryInSeconds(int seconds) {
             this.maxExecutionTimeForFinalRetryInSeconds = seconds;
+            return this;
+        }
+
+        /**
+         * Sets an action to be executed before sending the request.
+         *
+         * @param beforeSendAction The action to be executed before sending the request
+         * @return This builder for method chaining
+         */
+        public Builder beforeSend(Consumer<ApiRequest<?>> beforeSendAction) {
+            this.beforeSendAction = beforeSendAction;
             return this;
         }
 

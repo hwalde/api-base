@@ -4,7 +4,7 @@
 
   <groupId>de.entwicklertraining</groupId>
   <artifactId>api-base</artifactId>
-  <version>1.0.1</version>
+  <version>1.0.2</version>
   <packaging>jar</packaging>
 
   <name>REST API Base Library</name>

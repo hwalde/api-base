@@ -140,6 +140,10 @@ public abstract class ApiClient {
      * @throws ApiClientException if there is an error executing the request
      */
     public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequestWithExponentialBackoff(T request) {
+        if(settings.getBeforeSendAction() != null) {
+            settings.getBeforeSendAction().accept(request);
+        }
+
         long startMillis = System.currentTimeMillis();
         Instant startInstant = Instant.ofEpochMilli(startMillis);
 
@@ -180,6 +184,10 @@ public abstract class ApiClient {
      * @throws ApiClientException if there is an error executing the request
      */
     public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequest(T request) {
+        if(settings.getBeforeSendAction() != null) {
+            settings.getBeforeSendAction().accept(request);
+        }
+
         long startMillis = System.currentTimeMillis();
         Instant startInstant = Instant.ofEpochMilli(startMillis);
 
