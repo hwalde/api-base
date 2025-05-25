@@ -57,6 +57,15 @@ public abstract class ApiClient {
         this.settings = settings;
     }
 
+    /**
+     * Registers a custom exception type to be thrown when a specific HTTP status code is received.
+     * This allows for type-safe error handling based on HTTP status codes.
+     *
+     * @param statusCode The HTTP status code to handle
+     * @param exceptionClass The exception class to instantiate when this status code is received
+     * @param message The error message to include in the exception
+     * @param retry Whether requests that fail with this status code should be retried
+     */
     protected final void registerStatusCodeException(
             int statusCode,
             Class<? extends RuntimeException> exceptionClass,
@@ -67,7 +76,16 @@ public abstract class ApiClient {
     }
 
     /**
-     * Öffentliche Methode, um einen Request abzusetzen. Führt ggf. Retries durch.
+     * Sends an API request with automatic retry logic using exponential backoff.
+     * This method will automatically retry failed requests according to the configured
+     * retry policy in ApiClientSettings.
+     *
+     * @param <T> The type of the API request
+     * @param <U> The type of the API response
+     * @param request The API request to send
+     * @return The API response
+     * @throws ApiTimeoutException if the request times out or maximum retries are exceeded
+     * @throws ApiClientException if there is an error executing the request
      */
     public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequest(T request) {
         long startMillis = System.currentTimeMillis();
@@ -99,7 +117,15 @@ public abstract class ApiClient {
     }
 
     /**
-     * Öffentliche Methode, um einen Request abzusetzen. Führt keine(!) Retries durch.
+     * Sends an API request without automatic retry logic.
+     * This method will not retry failed requests, making it suitable for non-idempotent operations.
+     *
+     * @param <T> The type of the API request
+     * @param <U> The type of the API response
+     * @param request The API request to send
+     * @return The API response
+     * @throws ApiTimeoutException if the request times out
+     * @throws ApiClientException if there is an error executing the request
      */
     public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequestWithoutExponentialBackoff(T request) {
         long startMillis = System.currentTimeMillis();
@@ -133,8 +159,16 @@ public abstract class ApiClient {
     }
 
     /**
-     * Führt einen einzelnen HTTP-Request asynchron aus (per CompletableFuture).
-     * Falls Thread unterbrochen ist oder das Future gecanceled wird, bricht der Aufruf ab.
+     * Executes a single HTTP request asynchronously using Java's HttpClient.
+     * Handles request cancellation, timeouts, and response processing.
+     *
+     * @param <T> The type of the API request
+     * @param <U> The type of the API response
+     * @param request The API request to execute
+     * @param context The execution context for storing request/response data
+     * @return The API response
+     * @throws ApiTimeoutException if the request is cancelled or times out
+     * @throws ApiClientException if there is an error executing the request
      */
     protected <T extends ApiRequest<U>, U extends ApiResponse<T>> U runRequest(T request,
                                                                                ApiRequestExecutionContext<T, U> context) {
@@ -282,7 +316,14 @@ public abstract class ApiClient {
     }
 
     /**
-     * Führt den Request mit Exponential Backoff aus.
+     * Executes an operation with retry logic using exponential backoff.
+     * The retry behavior is controlled by the ApiClientSettings configuration.
+     *
+     * @param <U> The type of the operation result
+     * @param operation The operation to execute
+     * @param request The API request being processed
+     * @return The result of the operation
+     * @throws ApiTimeoutException if maximum retries are exceeded or the operation times out
      */
     protected <U extends ApiResponse<?>> U executeWithRetry(Supplier<U> operation, ApiRequest<?> request) {
         final long startTimeMs = System.currentTimeMillis();
@@ -340,6 +381,16 @@ public abstract class ApiClient {
         return false;
     }
 
+    /**
+     * Executes an operation with a timeout.
+     *
+     * @param <U> The type of the operation result
+     * @param operation The operation to execute
+     * @param remainingMs The maximum time to wait for the operation to complete, in milliseconds
+     * @return The result of the operation
+     * @throws ApiTimeoutException if the operation times out
+     * @throws ApiClientException if the operation is interrupted or fails
+     */
     protected <U> U executeWithTimeout(Supplier<U> operation, long remainingMs) {
         final CompletableFuture<U> future = CompletableFuture.supplyAsync(operation);
 
@@ -389,7 +440,7 @@ public abstract class ApiClient {
     }
 
     /**
-     * Schläft für 'delayMs', falls Zeit dafür vorhanden ist.
+     * Sleeps for 'delayMs', in case there is enough time left.
      */
     protected void applySleep(long delayMs, long remainingMs) {
         if (remainingMs > 0 && delayMs > remainingMs) {
@@ -430,8 +481,25 @@ public abstract class ApiClient {
     // Interne Exceptions
     // ---------------------------------------
 
+    /**
+     * Exception thrown when the API returns HTTP 429 (Too Many Requests).
+     * <p>
+     * This status code indicates that the user has sent too many requests in a given amount of time.
+     * It can be due to either rate limiting (too many requests per time window) or quota limits
+     * (exceeding the allowed number of requests or data volume).
+     */
     public static class HTTP_429_RateLimitOrQuotaException extends RuntimeException {
-        public enum ExceptionType { Unknown, RateLimit, Quota }
+        /**
+         * Type of rate limit that was exceeded.
+         */
+        public enum ExceptionType {
+            /** The type of rate limiting is unknown */
+            Unknown,
+            /** Rate limit was exceeded (too many requests per time window) */
+            RateLimit,
+            /** Quota limit was exceeded (overall usage limit) */
+            Quota
+        }
 
         private ExceptionType type;
 
@@ -454,6 +522,13 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception thrown when the API returns HTTP 400 (Bad Request).
+     * <p>
+     * This status code indicates that the server cannot or will not process the request
+     * due to something that is perceived to be a client error (e.g., malformed request syntax,
+     * invalid request message framing, or deceptive request routing).
+     */
     public static class HTTP_400_RequestRejectedException extends RuntimeException {
         public HTTP_400_RequestRejectedException(String message) {
             super(message);
@@ -464,6 +539,13 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception thrown when the API returns HTTP 401 (Unauthorized).
+     * <p>
+     * This status code indicates that the request has not been applied because it lacks valid
+     * authentication credentials for the target resource. The server generating a 401 response
+     * MUST send a WWW-Authenticate header field containing at least one challenge.
+     */
     public static class HTTP_401_AuthorizationException extends RuntimeException {
         public HTTP_401_AuthorizationException(String message) {
             super(message);
@@ -474,6 +556,14 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception thrown when the API returns HTTP 402 (Payment Required).
+     * <p>
+     * This status code is reserved for future use. The original intention was that it might be
+     * used as part of some form of digital cash or micropayment scheme, but no standard
+     * convention exists. Some APIs use this status code to indicate that the account has
+     * insufficient funds or requires a subscription upgrade.
+     */
     public static class HTTP_402_PaymentRequiredException extends RuntimeException {
         public HTTP_402_PaymentRequiredException(String message) {
             super(message);
@@ -484,6 +574,15 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception thrown when the API returns HTTP 403 (Forbidden).
+     * <p>
+     * This status code indicates that the server understood the request but refuses to
+     * authorize it. A server that wishes to make public why the request has been forbidden
+     * can describe that reason in the response payload (if any). Unlike 401 Unauthorized,
+     * the client's identity is known to the server but the authenticated user doesn't have
+     * permission to access the requested resource.
+     */
     public static class HTTP_403_PermissionDeniedException extends RuntimeException {
         public HTTP_403_PermissionDeniedException(String message) {
             super(message);
@@ -494,6 +593,14 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception thrown when the API returns HTTP 404 (Not Found).
+     * <p>
+     * This status code indicates that the origin server did not find a current representation
+     * for the target resource or is not willing to disclose that one exists. A 404 response
+     * is cacheable by default; i.e., unless otherwise indicated by the method definition or
+     * explicit cache controls.
+     */
     public static class HTTP_404_NotFoundException extends RuntimeException {
         public HTTP_404_NotFoundException(String message) {
             super(message);
@@ -504,6 +611,14 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception thrown when the API returns HTTP 422 (Unprocessable Entity).
+     * <p>
+     * This status code indicates that the server understands the content type of the
+     * request entity, and the syntax of the request entity is correct, but it was
+     * unable to process the contained instructions. This is commonly used for validation
+     * errors where the request is well-formed but contains semantic errors.
+     */
     public static class HTTP_422_UnprocessableEntityException extends RuntimeException {
         public HTTP_422_UnprocessableEntityException(String message) {
             super(message);
@@ -514,6 +629,13 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception thrown when the API returns HTTP 500 (Internal Server Error).
+     * <p>
+     * This status code indicates that the server encountered an unexpected condition
+     * that prevented it from fulfilling the request. This is a generic "catch-all"
+     * response when the server encounters an error that doesn't fit other status codes.
+     */
     public static class HTTP_500_ServerErrorException extends RuntimeException {
         public HTTP_500_ServerErrorException(String message) {
             super(message);
@@ -524,6 +646,14 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception thrown when the API returns HTTP 503 (Service Unavailable).
+     * <p>
+     * This status code indicates that the server is currently unable to handle the request
+     * due to a temporary overload or scheduled maintenance, which will likely be
+     * alleviated after some delay. The server MAY send a Retry-After header field to
+     * suggest an appropriate amount of time for the client to wait before retrying.
+     */
     public static class HTTP_503_ServerUnavailableException extends RuntimeException {
         public HTTP_503_ServerUnavailableException(String message) {
             super(message);
@@ -534,6 +664,14 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception thrown when the API returns HTTP 504 (Gateway Timeout).
+     * <p>
+     * This status code indicates that the server, while acting as a gateway or proxy,
+     * did not receive a timely response from an upstream server it needed to access
+     * in order to complete the request. This typically indicates a network connectivity
+     * issue between servers rather than a problem with the client's request.
+     */
     public static class HTTP_504_ServerTimeoutException extends RuntimeException {
         public HTTP_504_ServerTimeoutException(String message) {
             super(message);
@@ -544,6 +682,21 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception indicating that while the API endpoint returned a technically valid response,
+     * the content of that response cannot be used as expected.
+     * <p>
+     * This exception is used internally to signal cases where:
+     * <ul>
+     *   <li>The HTTP request completed successfully (2xx status code)</li>
+     *   <li>The response body is syntactically valid (e.g., valid JSON/XML)</li>
+     *   <li>But the content is semantically invalid or doesn't meet business requirements</li>
+     * </ul>
+     *
+     * <p>This is different from HTTP error status codes, as it indicates an issue with the
+     * response content rather than the request or server state. It's typically thrown during
+     * response processing, not by the {@code ApiClient} itself.
+     */
     public static class ApiResponseUnusableException extends RuntimeException {
         public ApiResponseUnusableException(String message) {
             super(message);
@@ -554,6 +707,20 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Exception indicating that an API operation could not complete within the allowed time.
+     * <p>
+     * This exception is thrown in various timeout scenarios:
+     * <ul>
+     *   <li>When the maximum execution time for a request is exceeded</li>
+     *   <li>When all retry attempts are exhausted</li>
+     *   <li>When a request is explicitly canceled</li>
+     *   <li>When a network timeout occurs during request execution</li>
+     * </ul>
+     *
+     * <p>This is different from {@code HTTP_504_ServerTimeoutException} which specifically
+     * represents an HTTP 504 Gateway Timeout response from the server.
+     */
     public static class ApiTimeoutException extends RuntimeException {
         public ApiTimeoutException(String message) {
             super(message);
@@ -564,6 +731,22 @@ public abstract class ApiClient {
         }
     }
 
+    /**
+     * Base exception class for all client-side errors that occur during API operations.
+     * <p>
+     * This exception is used for errors that occur before a valid HTTP response is received,
+     * or when the response cannot be properly processed. Common cases include:
+     * <ul>
+     *   <li>Network connectivity issues</li>
+     *   <li>Request serialization/deserialization errors</li>
+     *   <li>Interrupted operations</li>
+     *   <li>Unexpected runtime errors during request processing</li>
+     * </ul>
+     *
+     * <p>This is different from the HTTP_*Exception classes (like HTTP_404_NotFoundException)
+     * which represent specific HTTP error responses from the server. This exception indicates
+     * that the client encountered an issue before receiving a valid server response.
+     */
     public static class ApiClientException extends RuntimeException {
         public ApiClientException(String message) {
             super(message);

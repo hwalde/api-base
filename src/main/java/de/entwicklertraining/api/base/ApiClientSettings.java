@@ -3,30 +3,60 @@ package de.entwicklertraining.api.base;
 import java.util.Optional;
 
 /**
- * Holds the settings for retry and backoff behavior used by ApiClient.
- * Provides default values.
+ * Configuration settings for API client behavior including retry logic, backoff strategy, and authentication.
+ * This class provides a fluent builder API for configuration and sensible defaults for all settings.
+ * <p>
+ * Example usage:
+ * <pre>
+ * ApiClientSettings settings = ApiClientSettings.builder()
+ *     .maxRetries(5)
+ *     .initialDelayMs(1000)
+ *     .exponentialBase(2.0)
+ *     .useJitter(true)
+ *     .setBearerAuthenticationKey("your-api-key")
+ *     .build();
+ * </pre>
  */
 public final class ApiClientSettings {
+    /** Bearer token for API authentication, if required */
     private String bearerAuthenticationKey;
 
+    /** Maximum number of retry attempts for failed requests */
     private int maxRetries = 10;
-    private long initialDelayMs = 1000; // 1 Sekunde
+    
+    /** Initial delay before first retry in milliseconds */
+    private long initialDelayMs = 1000; // 1 second
+    
+    /** Base multiplier for exponential backoff calculation */
     private double exponentialBase = 2.0;
+    
+    /** Whether to add random jitter to backoff delays to prevent thundering herd */
     private boolean useJitter = true;
 
-    // Wenn die Zeit für einen weiteren Sleep nicht mehr reicht, kann es noch einen finalen Versuch geben.
+    /** 
+     * Minimum time in milliseconds remaining before timeout to attempt a final retry.
+     * This allows for one last attempt if there's enough time left.
+     */
     private int minSleepDurationForFinalRetryInSeconds = 500;
+    
+    /** 
+     * Maximum execution time in seconds to allow for the final retry attempt.
+     * This ensures the final retry has enough time to complete.
+     */
     private int maxExecutionTimeForFinalRetryInSeconds = 60;
 
     /**
-     * Constructor with default values. Provided for backward compatibility.
+     * Creates a new instance with default settings.
+     * Consider using {@link #builder()} for a more flexible configuration approach.
      */
     public ApiClientSettings() {
         // Default constructor with default values
     }
 
     /**
-     * Private constructor used by Builder.
+     * Private constructor used by the Builder.
+     *
+     * @param builder The builder containing all configuration values
      */
     private ApiClientSettings(Builder builder) {
         this.bearerAuthenticationKey = builder.bearerAuthenticationKey;
@@ -39,8 +69,10 @@ public final class ApiClientSettings {
     }
 
     /**
-     * Returns a new Builder initialized with the current field values of this ApiClientSettings instance.
-     * This can be useful if you want to copy or tweak an existing settings object.
+     * Creates a new Builder pre-populated with the current settings.
+     * Useful for creating a modified copy of an existing configuration.
+     *
+     * @return A new Builder instance with current settings
      */
     public Builder toBuilder() {
         return new Builder()
@@ -52,65 +84,138 @@ public final class ApiClientSettings {
                 .maxExecutionTimeForFinalRetryInSeconds(this.maxExecutionTimeForFinalRetryInSeconds);
     }
 
-    // --- GETTERS & EXISTING FLUENT SETTERS (OPTIONAL) ---
+    // --- GETTERS & FLUENT SETTERS ---
 
+    /**
+     * Gets the optional bearer authentication token.
+     *
+     * @return An Optional containing the bearer token if set, empty otherwise
+     */
     public Optional<String> getBearerAuthenticationKey() {
         return Optional.ofNullable(bearerAuthenticationKey);
     }
 
+    /**
+     * Gets the maximum number of retry attempts for failed requests.
+     *
+     * @return The maximum number of retries
+     */
     public int getMaxRetries() {
         return maxRetries;
     }
 
     /**
-     * If you want to continue supporting fluent setters on the instance level, keep these.
-     * Otherwise, consider removing them to enforce the builder usage.
+     * Sets the maximum number of retry attempts.
+     *
+     * @param maxRetries Maximum number of retries (must be >= 0)
+     * @return This instance for method chaining
      */
     public ApiClientSettings setMaxRetries(int maxRetries) {
         this.maxRetries = maxRetries;
         return this;
     }
 
+    /**
+     * Gets the initial delay before the first retry in milliseconds.
+     *
+     * @return The initial delay in milliseconds
+     */
     public long getInitialDelayMs() {
         return initialDelayMs;
     }
 
+    /**
+     * Sets the initial delay before the first retry.
+     *
+     * @param initialDelayMs Delay in milliseconds (must be >= 0)
+     * @return This instance for method chaining
+     */
     public ApiClientSettings setInitialDelayMs(long initialDelayMs) {
         this.initialDelayMs = initialDelayMs;
         return this;
     }
 
+    /**
+     * Gets the base value used for exponential backoff calculation.
+     *
+     * @return The exponential base value
+     */
     public double getExponentialBase() {
         return exponentialBase;
     }
 
+    /**
+     * Sets the base value for exponential backoff calculation.
+     * Each retry delay is calculated as: initialDelayMs * (exponentialBase ^ retryNumber)
+     *
+     * @param exponentialBase The base value (must be > 1.0)
+     * @return This instance for method chaining
+     * @throws IllegalArgumentException if exponentialBase is <= 1.0
+     */
     public ApiClientSettings setExponentialBase(double exponentialBase) {
         this.exponentialBase = exponentialBase;
         return this;
     }
 
+    /**
+     * Checks if jitter is enabled for backoff delays.
+     *
+     * @return true if jitter is enabled, false otherwise
+     */
     public boolean isUseJitter() {
         return useJitter;
     }
 
+    /**
+     * Enables or disables jitter for backoff delays.
+     * When enabled, adds randomness to retry delays to prevent thundering herd problems.
+     *
+     * @param useJitter true to enable jitter, false to disable
+     * @return This instance for method chaining
+     */
     public ApiClientSettings setUseJitter(boolean useJitter) {
         this.useJitter = useJitter;
         return this;
     }
 
+    /**
+     * Gets the minimum duration in seconds required to attempt a final retry.
+     *
+     * @return The minimum duration in seconds
+     */
     public int getMinSleepDurationForFinalRetryInSeconds() {
         return minSleepDurationForFinalRetryInSeconds;
     }
 
+    /**
+     * Sets the minimum duration required to attempt a final retry.
+     * If the remaining time before timeout is less than this value, no final retry will be attempted.
+     *
+     * @param seconds Minimum duration in seconds (must be >= 0)
+     * @return This instance for method chaining
+     */
     public ApiClientSettings setMinSleepDurationForFinalRetryInSeconds(int seconds) {
         this.minSleepDurationForFinalRetryInSeconds = seconds;
         return this;
     }
 
+    /**
+     * Gets the maximum execution time in seconds allowed for the final retry attempt.
+     *
+     * @return The maximum execution time in seconds
+     */
     public int getMaxExecutionTimeForFinalRetryInSeconds() {
         return maxExecutionTimeForFinalRetryInSeconds;
     }
 
+    /**
+     * Sets the maximum execution time allowed for the final retry attempt.
+     * This ensures the final retry has sufficient time to complete.
+     *
+     * @param seconds Maximum execution time in seconds (must be > 0)
+     * @return This instance for method chaining
+     * @throws IllegalArgumentException if seconds <= 0
+     */
     public ApiClientSettings setMaxExecutionTimeForFinalRetryInSeconds(int seconds) {
         this.maxExecutionTimeForFinalRetryInSeconds = seconds;
         return this;
@@ -118,10 +223,19 @@ public final class ApiClientSettings {
 
     // --- BUILDER ---
 
+    /**
+     * Creates a new Builder instance for constructing ApiClientSettings.
+     *
+     * @return A new Builder instance
+     */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Builder for creating immutable ApiClientSettings instances.
+     * Provides a fluent API for configuration with sensible defaults.
+     */
     public static final class Builder {
         private int maxRetries = 10;
         private long initialDelayMs = 1000;
