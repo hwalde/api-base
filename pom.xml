@@ -4,10 +4,10 @@
 
   <groupId>de.entwicklertraining</groupId>
   <artifactId>api-base</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
   <packaging>jar</packaging>
 
-  <name>api-base</name>
+  <name>REST API Base Library</name>
   <description>Base library to interact with REST APIs.</description>
   <url>https://entwickler-training.de</url>
 
@@ -31,9 +31,9 @@
   </developers>
 
   <scm>
-    <connection>scm:git:git://github.com/hwalde/javafx-vite-window.git</connection>
-    <developerConnection>scm:git:ssh://github.com:hwalde/javafx-vite-window.git</developerConnection>
-    <url>http://github.com/hwalde/javafx-vite-window/tree/master</url>
+    <connection>scm:git:git://github.com/hwalde/api-base.git</connection>
+    <developerConnection>scm:git:ssh://github.com:hwalde/api-base.git</developerConnection>
+    <url>http://github.com/hwalde/api-base/tree/master</url>
   </scm>
 
   <properties>

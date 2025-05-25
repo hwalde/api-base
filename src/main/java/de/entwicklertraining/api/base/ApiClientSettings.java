@@ -233,13 +233,6 @@ public final class ApiClientSettings {
     }
 
     /**
-     * Builder for creating immutable ApiClientSettings instances.
-     * Provides a fluent API for configuration with sensible defaults.
-     */
-    /**
-     * Builder for creating {@link ApiClientSettings} instances with a fluent API.
-     */
-    /**
      * A builder for creating {@link ApiClientSettings} instances with a fluent API.
      * This builder allows for easy configuration of client settings with sensible defaults.
      * 
@@ -262,6 +255,11 @@ public final class ApiClientSettings {
         private boolean useJitter = true;
         private int minSleepDurationForFinalRetryInSeconds = 500;
         private int maxExecutionTimeForFinalRetryInSeconds = 60;
+
+        /**
+         * Creates a new Builder instance with default settings.
+         */
+        public Builder() {}
 
         /**
          * Sets the Bearer authentication key for API requests.

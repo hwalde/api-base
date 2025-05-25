@@ -36,6 +36,13 @@ public abstract class ApiRequestBuilderBase<B extends ApiRequestBuilderBase<B, R
     protected Supplier<Boolean> isCanceledSupplier = () -> false;
 
     /**
+     * Creates a new ApiRequestBuilderBase instance.
+     */
+    public ApiRequestBuilderBase() {
+        // Default constructor
+    }
+
+    /**
      * Sets the maximum execution time for the request.
      *
      * @param seconds Maximum execution time in seconds (0 for no timeout)

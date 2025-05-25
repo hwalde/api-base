@@ -912,10 +912,21 @@ public abstract class ApiClient {
      * that the client encountered an issue before receiving a valid server response.
      */
     public static class ApiClientException extends RuntimeException {
+        /**
+         * Creates a new ApiClientException with the specified detail message.
+         *
+         * @param message the detail message (which is saved for later retrieval by the getMessage() method)
+         */
         public ApiClientException(String message) {
             super(message);
         }
 
+        /**
+         * Creates a new ApiClientException with the specified detail message and cause.
+         *
+         * @param message the detail message (which is saved for later retrieval by the getMessage() method)
+         * @param cause the cause (which is saved for later retrieval by the getCause() method)
+         */
         public ApiClientException(String message, Throwable cause) {
             super(message, cause);
         }
