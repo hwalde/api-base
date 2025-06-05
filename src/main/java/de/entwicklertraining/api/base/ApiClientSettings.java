@@ -90,7 +90,8 @@ public final class ApiClientSettings {
                 .useJitter(this.useJitter)
                 .minSleepDurationForFinalRetryInSeconds(this.minSleepDurationForFinalRetryInSeconds)
                 .maxExecutionTimeForFinalRetryInSeconds(this.maxExecutionTimeForFinalRetryInSeconds)
-                .beforeSend(this.beforeSendAction);
+                .beforeSend(this.beforeSendAction)
+                .setBearerAuthenticationKey(this.getBearerAuthenticationKey().orElse(null));
     }
 
     // --- GETTERS & FLUENT SETTERS ---

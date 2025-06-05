@@ -39,7 +39,7 @@ public abstract class ApiClient {
 
     /** The HTTP client used to execute requests */
     protected final HttpClient httpClient;
-    private final ApiClientSettings settings;
+    protected final ApiClientSettings settings;
     private Optional<String> baseUrl = Optional.empty();
     private boolean statusCodeExceptionsWarningLogged = false;
 
