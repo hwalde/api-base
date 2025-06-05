@@ -120,14 +120,16 @@ public class GetTodoRequest extends ApiRequest<GetTodoResponse> {
         }
     }
 
-    public static Builder builder(int todoId) {
-        return new Builder(todoId);
+    public static Builder builder(JsonPlaceholderClient client, int todoId) {
+        return new Builder(client, todoId);
     }
 
     public static class Builder extends ApiRequestBuilderBase<Builder, GetTodoRequest> {
+        private final JsonPlaceholderClient client;
         private final int todoId;
 
-        public Builder(int todoId) {
+        public Builder(JsonPlaceholderClient client, int todoId) {
+            this.client = client;
             this.todoId = todoId;
         }
 
@@ -138,12 +140,12 @@ public class GetTodoRequest extends ApiRequest<GetTodoResponse> {
 
         @Override
         public GetTodoResponse executeWithExponentialBackoff() {
-            return JsonPlaceholderClient.getInstance().sendRequestWithExponentialBackoff(build());
+            return client.sendRequestWithExponentialBackoff(build());
         }
 
         @Override
         public GetTodoResponse execute() {
-            return JsonPlaceholderClient.getInstance().sendRequest(build());
+            return client.sendRequest(build());
         }
     }
 }
@@ -178,7 +180,6 @@ import de.entwicklertraining.api.base.ApiClient;
 import de.entwicklertraining.api.base.ApiClientSettings;
 
 public class JsonPlaceholderClient extends ApiClient {
-    private static JsonPlaceholderClient instance;
 
     public JsonPlaceholderClient(ApiClientSettings settings) {
         super(settings);
@@ -190,16 +191,9 @@ public class JsonPlaceholderClient extends ApiClient {
         registerStatusCodeException(500, HTTP_500_ServerErrorException.class, "Server error at JSONPlaceholder", true); // retry = true
     }
 
-    public static synchronized JsonPlaceholderClient getInstance() {
-        if (instance == null) {
-            instance = new JsonPlaceholderClient(ApiClientSettings.builder().build());
-        }
-        return instance;
-    }
-
     // Factory method for the RequestBuilder
     public GetTodoRequest.Builder getTodo(int todoId) {
-        return GetTodoRequest.builder(todoId);
+        return GetTodoRequest.builder(this, todoId);
     }
 }
 ```
@@ -214,22 +208,24 @@ import de.entwicklertraining.api.base.ApiCallCaptureInput; // For capture exampl
 
 public class Main {
     public static void main(String[] args) {
-        // Create and execute request
+        // Create the client and execute requests
         try {
+            JsonPlaceholderClient client = new JsonPlaceholderClient(ApiClientSettings.builder().build());
+
             System.out.println("Retrieving Todo with ID 1...");
-            GetTodoResponse response = GetTodoRequest.builder(1)
+            GetTodoResponse response = client.getTodo(1)
                     // Optional: Request-specific settings
                     .maxExecutionTimeInSeconds(10)
                     .captureOnSuccess(Main::logSuccess) // Optional: Capture on success
                     .captureOnError(Main::logError)     // Optional: Capture on error
-                    .executeWithExponentialBackoff(); // With retries
+                    .executeWithExponentialBackoff();   // With retries
 
             Todo todo = response.getTodo();
             System.out.println("Received: " + todo);
 
             System.out.println("\nTrying to retrieve a non-existent Todo (ID 9999)...");
             // Example for error handling
-            GetTodoRequest.builder(9999)
+            client.getTodo(9999)
                   .captureOnError(Main::logError)
                   .execute(); // Without retries for this example
 
@@ -282,7 +278,8 @@ registerStatusCodeException(429, MyRateLimitException.class, "Too many requests"
 
 * **Request-specific Timeouts and Capture Hooks**:
 ```java
-MyResponse response = MyRequest.builder()
+MyApiClient client = new MyApiClient();
+MyResponse response = client.myRequest()
     .maxExecutionTimeInSeconds(5) // Timeout for this specific request
     .captureOnSuccess(successData -> System.out.println("YAY: " + successData.outputData()))
     .captureOnError(errorData -> System.err.println("OOPS: " + errorData.exceptionMessage()))
@@ -296,10 +293,12 @@ MyResponse response = MyRequest.builder()
 // Create a state that you can change from outside
 final AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
+MyApiClient client = new MyApiClient();
+
 // Start the request in a new thread to be able to cancel it
 Thread apiCallThread = new Thread(() -> {
     try {
-        MyResponse response = MyRequest.builder()
+        MyResponse response = client.myRequest()
             .setCancelSupplier(cancelFlag::get) // Pass the supplier
             .executeWithExponentialBackoff();
         System.out.println("Response received: " + response);
