@@ -39,6 +39,8 @@ public abstract class ApiClient {
 
     /** The HTTP client used to execute requests */
     protected final HttpClient httpClient;
+
+    /** The settings for this API client */
     protected ApiClientSettings settings;
     private Optional<String> baseUrl = Optional.empty();
     private boolean statusCodeExceptionsWarningLogged = false;
