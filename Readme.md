@@ -32,7 +32,7 @@ Simply add the following dependency to your `pom.xml`:
 <dependency>
     <groupId>de.entwicklertraining</groupId>
     <artifactId>api-base</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
 </dependency>
 ```
 
