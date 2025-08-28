@@ -21,7 +21,7 @@ Tired of boilerplate code when creating API clients? Want to focus on the logic 
 * **Out-of-the-Box Support for:**
     * GET, POST, DELETE requests
     * JSON and binary payloads
-    * Bearer token authentication
+    * Flexible authentication (Bearer token, API keys, custom headers)
     * Additional HTTP headers
 
 ## ⚙️ Installation
@@ -32,7 +32,7 @@ Simply add the following dependency to your `pom.xml`:
 <dependency>
     <groupId>de.entwicklertraining</groupId>
     <artifactId>api-base</artifactId>
-    <version>1.0.4</version>
+    <version>1.0.5</version>
 </dependency>
 ```
 
@@ -178,12 +178,17 @@ public class GetTodoResponse extends ApiResponse<GetTodoRequest> {
 // JsonPlaceholderClient.java
 import de.entwicklertraining.api.base.ApiClient;
 import de.entwicklertraining.api.base.ApiClientSettings;
+import de.entwicklertraining.api.base.ApiHttpConfiguration;
 
 public class JsonPlaceholderClient extends ApiClient {
 
     public JsonPlaceholderClient(ApiClientSettings settings) {
-        super(settings);
-        setBaseUrl("[https://jsonplaceholder.typicode.com](https://jsonplaceholder.typicode.com)");
+        this(settings, new ApiHttpConfiguration());
+    }
+
+    public JsonPlaceholderClient(ApiClientSettings settings, ApiHttpConfiguration httpConfig) {
+        super(settings, httpConfig);
+        setBaseUrl("https://jsonplaceholder.typicode.com");
 
         // Register specific exception handlers for status codes
         registerStatusCodeException(404, HTTP_404_NotFoundException.class, "Todo not found", false);
@@ -203,6 +208,7 @@ public class JsonPlaceholderClient extends ApiClient {
 ```java
 // Main.java
 import de.entwicklertraining.api.base.ApiClientSettings;
+import de.entwicklertraining.api.base.ApiHttpConfiguration;
 import de.entwicklertraining.api.base.ApiCallCaptureInput; // For capture example
 // (Import your Client, Request, Response, and Todo classes here)
 
@@ -210,7 +216,18 @@ public class Main {
     public static void main(String[] args) {
         // Create the client and execute requests
         try {
-            JsonPlaceholderClient client = new JsonPlaceholderClient(ApiClientSettings.builder().build());
+            // Configure technical client settings
+            ApiClientSettings settings = ApiClientSettings.builder()
+                .maxRetries(3)
+                .initialDelayMs(1000)
+                .build();
+
+            // Configure HTTP transport (optional)
+            ApiHttpConfiguration httpConfig = ApiHttpConfiguration.builder()
+                .header("User-Agent", "MyApp/1.0")
+                .build();
+
+            JsonPlaceholderClient client = new JsonPlaceholderClient(settings, httpConfig);
 
             System.out.println("Retrieving Todo with ID 1...");
             GetTodoResponse response = client.getTodo(1)
@@ -260,14 +277,55 @@ See? With `api-base`, you can focus on what matters: interacting with the API. T
 
 ## 💡 Core Concepts
 
-* **`ApiClient`**: Your main interface to the API. Extend this class to create your specific client. Here you configure the base URL and register custom exception handlers for HTTP status codes.
+* **`ApiClient`**: Your main interface to the API. Extend this class to create your specific client. Here you configure the base URL and register custom exception handlers for HTTP status codes. Can be configured with both technical settings (`ApiClientSettings`) and HTTP transport configuration (`ApiHttpConfiguration`).
 * **`ApiRequest<R extends ApiResponse<?>>`**: Represents a single request. Extend this class to define endpoint, HTTP method, request body, and the logic for creating the `ApiResponse`.
 * **`ApiResponse<Q extends ApiRequest<?>>`**: Represents the response to a request. Contains the parsed data and a reference to the original `ApiRequest`.
 * **`ApiRequestBuilderBase<B, R>`**: The base for your fluent request builders, to create and configure requests comfortably (e.g., timeouts, capture hooks).
-* **`ApiClientSettings`**: Configures the behavior of your `ApiClient`, especially for retries (count, delay, jitter, etc.) and authentication.
+* **`ApiClientSettings`**: Configures the technical behavior of your `ApiClient`, especially for retries (count, delay, jitter, etc.) and execution timeouts.
+* **`ApiHttpConfiguration`**: Configures the HTTP transport layer including global headers, authentication, and request modifiers.
 * **`ApiCallCaptureInput`**: A record that contains all relevant information about an API call for logging or debugging purposes, if capturing is enabled.
 
 ## 🔬 Advanced Usage
+
+* **Flexible Authentication Configuration**:
+```java
+// Bearer token authentication
+ApiHttpConfiguration bearerConfig = ApiHttpConfiguration.builder()
+    .header("Authorization", "Bearer your-token-here")
+    .build();
+
+// API key authentication
+ApiHttpConfiguration apiKeyConfig = ApiHttpConfiguration.builder()
+    .header("X-API-Key", "your-api-key")
+    .header("X-Client-Version", "1.0.0")
+    .build();
+
+// Custom authentication with request modifiers
+ApiHttpConfiguration customConfig = ApiHttpConfiguration.builder()
+    .requestModifier(builder -> {
+        // Add dynamic headers, e.g., timestamps, request IDs
+        builder.header("X-Request-ID", UUID.randomUUID().toString());
+        builder.header("X-Timestamp", String.valueOf(System.currentTimeMillis()));
+    })
+    .build();
+
+// Create client with specific configuration
+MyApiClient client = new MyApiClient(settings, customConfig);
+```
+
+* **Configuration Inheritance**:
+```java
+// Base configuration
+ApiHttpConfiguration baseConfig = ApiHttpConfiguration.builder()
+    .header("User-Agent", "MyApp/1.0")
+    .header("Accept", "application/json")
+    .build();
+
+// Extended configuration for authenticated requests
+ApiHttpConfiguration authConfig = baseConfig.toBuilder()
+    .header("Authorization", "Bearer token-123")
+    .build();
+```
 
 * **Custom Error Handling**:
 ```java

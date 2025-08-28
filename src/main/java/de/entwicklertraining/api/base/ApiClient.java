@@ -42,6 +42,9 @@ public abstract class ApiClient {
 
     /** The settings for this API client */
     protected ApiClientSettings settings;
+    
+    /** The HTTP configuration for this API client */
+    protected ApiHttpConfiguration httpConfig;
     private Optional<String> baseUrl = Optional.empty();
     private boolean statusCodeExceptionsWarningLogged = false;
 
@@ -104,11 +107,23 @@ public abstract class ApiClient {
      * @throws NullPointerException if settings is null
      */
     protected ApiClient(ApiClientSettings settings) {
+        this(settings, new ApiHttpConfiguration());
+    }
+    
+    /**
+     * Creates a new ApiClient with the specified settings and HTTP configuration.
+     *
+     * @param settings The settings to use for this client
+     * @param httpConfig The HTTP configuration to use for this client
+     * @throws NullPointerException if settings or httpConfig is null
+     */
+    protected ApiClient(ApiClientSettings settings, ApiHttpConfiguration httpConfig) {
         // HttpClient an Virtual-Thread-Executor binden:
         this.httpClient = HttpClient.newBuilder()
                 .executor(HTTP_CLIENT_EXECUTOR)
                 .build();
         this.settings = settings;
+        this.httpConfig = httpConfig;
     }
 
     /**
@@ -247,10 +262,13 @@ public abstract class ApiClient {
                 .uri(URI.create(fullUrl))
                 .header("Content-Type", request.getContentType());
 
-        if (this.settings.getBearerAuthenticationKey().isPresent()) {
-            builder = builder.header("Authorization", "Bearer " + this.settings.getBearerAuthenticationKey().get());
-        }
+        // Apply global headers from HTTP configuration
+        httpConfig.getGlobalHeaders().forEach(builder::header);
+        
+        // Apply request modifiers from HTTP configuration
+        httpConfig.getRequestModifiers().forEach(modifier -> modifier.accept(builder));
 
+        // Apply request-specific headers (these can override global headers)
         for (Map.Entry<String, String> entry : request.getAdditionalHeaders().entrySet()) {
             builder.header(entry.getKey(), entry.getValue());
         }

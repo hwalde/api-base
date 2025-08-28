@@ -4,7 +4,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * Configuration settings for API client behavior including retry logic, backoff strategy, and authentication.
+ * Configuration settings for API client behavior including retry logic and backoff strategy.
  * This class provides a fluent builder API for configuration and sensible defaults for all settings.
  * <p>
  * Example usage:
@@ -14,14 +14,10 @@ import java.util.function.Consumer;
  *     .initialDelayMs(1000)
  *     .exponentialBase(2.0)
  *     .useJitter(true)
- *     .setBearerAuthenticationKey("your-api-key")
  *     .build();
  * </pre>
  */
-public final class ApiClientSettings {
-    /** Bearer token for API authentication, if required */
-    private String bearerAuthenticationKey;
-
+public class ApiClientSettings {
     /** Maximum number of retry attempts for failed requests */
     private int maxRetries = 10;
 
@@ -66,7 +62,6 @@ public final class ApiClientSettings {
      * @param builder The builder containing all configuration values
      */
     private ApiClientSettings(Builder builder) {
-        this.bearerAuthenticationKey = builder.bearerAuthenticationKey;
         this.maxRetries = builder.maxRetries;
         this.initialDelayMs = builder.initialDelayMs;
         this.exponentialBase = builder.exponentialBase;
@@ -90,20 +85,10 @@ public final class ApiClientSettings {
                 .useJitter(this.useJitter)
                 .minSleepDurationForFinalRetryInSeconds(this.minSleepDurationForFinalRetryInSeconds)
                 .maxExecutionTimeForFinalRetryInSeconds(this.maxExecutionTimeForFinalRetryInSeconds)
-                .beforeSend(this.beforeSendAction)
-                .setBearerAuthenticationKey(this.getBearerAuthenticationKey().orElse(null));
+                .beforeSend(this.beforeSendAction);
     }
 
     // --- GETTERS & FLUENT SETTERS ---
-
-    /**
-     * Gets the optional bearer authentication token.
-     *
-     * @return An Optional containing the bearer token if set, empty otherwise
-     */
-    public Optional<String> getBearerAuthenticationKey() {
-        return Optional.ofNullable(bearerAuthenticationKey);
-    }
 
     /**
      * Gets the maximum number of retry attempts for failed requests.
@@ -262,12 +247,10 @@ public final class ApiClientSettings {
      *     .initialDelayMs(1000)
      *     .exponentialBase(2.0)
      *     .useJitter(true)
-     *     .setBearerAuthenticationKey("your-api-key")
      *     .build();
      * </pre>
      */
-    public static final class Builder {
-        private String bearerAuthenticationKey;
+    public static class Builder {
         private int maxRetries = 10;
         private long initialDelayMs = 1000;
         private double exponentialBase = 2.0;
@@ -280,17 +263,6 @@ public final class ApiClientSettings {
          * Creates a new Builder instance with default settings.
          */
         public Builder() {}
-
-        /**
-         * Sets the Bearer authentication key for API requests.
-         *
-         * @param key The Bearer token to use for authentication
-         * @return This builder for method chaining
-         */
-        public Builder setBearerAuthenticationKey(String key) {
-            this.bearerAuthenticationKey = key;
-            return this;
-        }
 
         /**
          * Sets the maximum number of retry attempts for failed requests.
