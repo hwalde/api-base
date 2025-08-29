@@ -1,5 +1,7 @@
 package de.entwicklertraining.api.base;
 
+import de.entwicklertraining.api.base.streaming.*;
+import de.entwicklertraining.cancellation.CancellationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +17,9 @@ import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.Optional;
+import java.util.stream.Stream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 
 /**
  * Abstract base class for a generic API client with
@@ -149,14 +154,32 @@ public abstract class ApiClient {
      * This method will automatically retry failed requests according to the configured
      * retry policy in ApiClientSettings.
      *
-     * @param <T> The type of the API request
-     * @param <U> The type of the API response
+     * @param <T> The type of the API request that extends ApiRequest
+     * @param request The API request to send
+     * @return The API response
+     * @throws ApiTimeoutException if the request times out or maximum retries are exceeded
+     * @throws ApiClientException if there is an error executing the request
+     * @deprecated Use {@link #sendRequestWithRetry(ApiRequest)} instead for consistent naming with streaming API
+     */
+    @Deprecated(since = "1.1.0", forRemoval = false)
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequestWithExponentialBackoff(T request) {
+        return sendRequestWithRetry(request);
+    }
+
+    /**
+     * Sends an API request with automatic retry logic using exponential backoff.
+     * This method will automatically retry failed requests according to the configured
+     * retry policy in ApiClientSettings.
+     *
+     * @param <T> The type of the API request that extends ApiRequest
      * @param request The API request to send
      * @return The API response
      * @throws ApiTimeoutException if the request times out or maximum retries are exceeded
      * @throws ApiClientException if there is an error executing the request
      */
-    public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequestWithExponentialBackoff(T request) {
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequestWithRetry(T request) {
         if(settings.getBeforeSendAction() != null) {
             settings.getBeforeSendAction().accept(request);
         }
@@ -172,7 +195,7 @@ public abstract class ApiClient {
         ApiRequestExecutionContext<T, U> context = new ApiRequestExecutionContext<>();
 
         try {
-            finalResponse = executeWithRetry(() -> runRequest(request, context), request);
+            finalResponse = executeRequestWithRetry(() -> runRequest(request, context), request);
             success = true;
             return finalResponse;
         } catch (RuntimeException ex) {
@@ -190,16 +213,101 @@ public abstract class ApiClient {
     }
 
     /**
+     * Executes an API request without automatic retry logic.
+     * This method automatically handles both regular and streaming requests based on the request configuration.
+     *
+     * @param <T> The type of the API request that extends ApiRequest
+     * @param request The API request to execute
+     * @return The API response as ApiResponse<?>
+     * @throws ApiTimeoutException if the request times out
+     * @throws ApiClientException if there is an error executing the request
+     * @since 2.1.0
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public <T extends ApiRequest<?>> ApiResponse<?> execute(T request) {
+        if (request.isStreamingEnabled()) {
+            // TODO: Implement streaming in 2.2.0 - for now throw exception
+            throw new UnsupportedOperationException("Streaming via execute() will be implemented in version 2.2.0. " +
+                "Use the existing sendStreamingRequest() methods for now.");
+        }
+        return sendRequest((ApiRequest) request);
+    }
+    
+    /**
+     * Executes an API request with automatic retry logic using exponential backoff.
+     * This method automatically handles both regular and streaming requests based on the request configuration.
+     *
+     * @param <T> The type of the API request that extends ApiRequest
+     * @param request The API request to execute
+     * @return The API response as ApiResponse<?>
+     * @throws ApiTimeoutException if the request times out or maximum retries are exceeded
+     * @throws ApiClientException if there is an error executing the request
+     * @since 2.1.0
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public <T extends ApiRequest<?>> ApiResponse<?> executeWithRetry(T request) {
+        if (request.isStreamingEnabled()) {
+            // TODO: Implement streaming in 2.2.0 - for now throw exception
+            throw new UnsupportedOperationException("Streaming via executeWithRetry() will be implemented in version 2.2.0. " +
+                "Use the existing sendStreamingRequestWithRetry() methods for now.");
+        }
+        return sendRequestWithRetry((ApiRequest) request);
+    }
+    
+    /**
+     * Executes an API request asynchronously without automatic retry logic.
+     * This method automatically handles both regular and streaming requests based on the request configuration.
+     *
+     * @param <T> The type of the API request that extends ApiRequest
+     * @param request The API request to execute
+     * @return A CompletableFuture containing the API response as CompletableFuture<? extends ApiResponse<?>>
+     * @since 2.1.0
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public <T extends ApiRequest<?>> CompletableFuture<? extends ApiResponse<?>> executeAsync(T request) {
+        if (request.isStreamingEnabled()) {
+            // TODO: Implement streaming in 2.2.0 - for now throw exception
+            return CompletableFuture.failedFuture(new UnsupportedOperationException(
+                "Streaming via executeAsync() will be implemented in version 2.2.0. " +
+                "Use the existing sendStreamingRequest() methods for now."));
+        }
+        return CompletableFuture.supplyAsync(() -> (ApiResponse<?>) sendRequest((ApiRequest) request), HTTP_CLIENT_EXECUTOR);
+    }
+    
+    /**
+     * Executes an API request asynchronously with automatic retry logic using exponential backoff.
+     * This method automatically handles both regular and streaming requests based on the request configuration.
+     *
+     * @param <T> The type of the API request that extends ApiRequest
+     * @param request The API request to execute
+     * @return A CompletableFuture containing the API response as CompletableFuture<? extends ApiResponse<?>>
+     * @since 2.1.0
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public <T extends ApiRequest<?>> CompletableFuture<? extends ApiResponse<?>> executeAsyncWithRetry(T request) {
+        if (request.isStreamingEnabled()) {
+            // TODO: Implement streaming in 2.2.0 - for now throw exception
+            return CompletableFuture.failedFuture(new UnsupportedOperationException(
+                "Streaming via executeAsyncWithRetry() will be implemented in version 2.2.0. " +
+                "Use the existing sendStreamingRequestWithRetry() methods for now."));
+        }
+        return CompletableFuture.supplyAsync(() -> (ApiResponse<?>) sendRequestWithRetry((ApiRequest) request), HTTP_CLIENT_EXECUTOR);
+    }
+    
+
+    /**
      * Sends an API request without automatic retry logic.
      * This method will not retry failed requests, making it suitable for non-idempotent operations.
-     *
-     * @param <T> The type of the API request
-     * @param <U> The type of the API response
+     * 
+     * @deprecated Use {@link #execute(ApiRequest)} instead
+     * @param <T> The type of the API request that extends ApiRequest
      * @param request The API request to send
      * @return The API response
      * @throws ApiTimeoutException if the request times out
      * @throws ApiClientException if there is an error executing the request
      */
+    @Deprecated(since = "2.1.0", forRemoval = false)
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public <T extends ApiRequest<U>, U extends ApiResponse<T>> U sendRequest(T request) {
         if(settings.getBeforeSendAction() != null) {
             settings.getBeforeSendAction().accept(request);
@@ -219,7 +327,7 @@ public abstract class ApiClient {
         ApiRequestExecutionContext<T, U> context = new ApiRequestExecutionContext<>();
 
         try {
-            finalResponse = executeWithTimeout(() -> runRequest(request, context), maxDurationMs);
+            finalResponse = executeRequestWithTimeout(() -> runRequest(request, context), maxDurationMs);
             success = true;
             return finalResponse;
         } catch (RuntimeException ex) {
@@ -239,8 +347,8 @@ public abstract class ApiClient {
      * Executes a single HTTP request asynchronously using Java's HttpClient.
      * Handles request cancellation, timeouts, and response processing.
      *
-     * @param <T> The type of the API request
-     * @param <U> The type of the API response
+     * @param <T> The type of the API request that extends ApiRequest
+     * @param <U> The type of the API response that extends ApiResponse
      * @param request The API request to execute
      * @param context The execution context for storing request/response data
      * @return The API response
@@ -367,9 +475,9 @@ public abstract class ApiClient {
 
             throw new ApiClientException("Unexpected HTTP status " + statusCode + " - " + bodySnippet);
 
-        } catch (CancellationException cex) {
-            // Future gecanceled => Abbruch
-            throw new ApiTimeoutException("Request was canceled", cex);
+        } catch (java.util.concurrent.CancellationException cex) {
+            // CompletableFuture was canceled => graceful cancellation
+            throw new CancellationException("Request was canceled", cex);
 
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
@@ -408,13 +516,13 @@ public abstract class ApiClient {
      * Executes an operation with retry logic using exponential backoff.
      * The retry behavior is controlled by the ApiClientSettings configuration.
      *
-     * @param <U> The type of the operation result
+     * @param <U> The type of the operation result that extends ApiResponse
      * @param operation The operation to execute
      * @param request The API request being processed
      * @return The result of the operation
      * @throws ApiTimeoutException if maximum retries are exceeded or the operation times out
      */
-    protected <U extends ApiResponse<?>> U executeWithRetry(Supplier<U> operation, ApiRequest<?> request) {
+    protected <U extends ApiResponse<?>> U executeRequestWithRetry(Supplier<U> operation, ApiRequest<?> request) {
         final long startTimeMs = System.currentTimeMillis();
         final int maxDurationSeconds = request.getMaxExecutionTimeInSeconds();
         final long maxDurationMs = maxDurationSeconds * 1000L;
@@ -423,6 +531,11 @@ public abstract class ApiClient {
         Throwable latestException = null;
 
         for (int attempt = 1; attempt <= settings.getMaxRetries(); attempt++) {
+            // Check for cancellation before each retry attempt
+            if (request.getIsCanceledSupplier().get()) {
+                throw new CancellationException("Request was cancelled before retry attempt " + attempt);
+            }
+            
             try {
                 long elapsedMs = System.currentTimeMillis() - startTimeMs;
                 long remainingMs = maxDurationMs - elapsedMs;
@@ -431,7 +544,7 @@ public abstract class ApiClient {
                     throw createTimeoutException(latestReason, maxDurationSeconds, latestException);
                 }
 
-                return executeWithTimeout(operation, remainingMs);
+                return executeRequestWithTimeout(operation, remainingMs);
 
             } catch (Throwable ex) {
                 if (isRetryableException(ex)) {
@@ -450,6 +563,11 @@ public abstract class ApiClient {
             long remainingMs = maxDurationMs - elapsedMs;
             if (maxDurationMs > 0 && remainingMs <= 0) {
                 throw createTimeoutException(latestReason, maxDurationSeconds, latestException);
+            }
+
+            // Check for cancellation before sleeping
+            if (request.getIsCanceledSupplier().get()) {
+                throw new CancellationException("Request was cancelled before retry sleep");
             }
 
             long durationOfNextSleep = calculateNextSleep(settings.getInitialDelayMs());
@@ -480,7 +598,7 @@ public abstract class ApiClient {
      * @throws ApiTimeoutException if the operation times out
      * @throws ApiClientException if the operation is interrupted or fails
      */
-    protected <U> U executeWithTimeout(Supplier<U> operation, long remainingMs) {
+    protected <U> U executeRequestWithTimeout(Supplier<U> operation, long remainingMs) {
         final CompletableFuture<U> future = CompletableFuture.supplyAsync(operation);
 
         try {
@@ -1032,8 +1150,755 @@ public abstract class ApiClient {
     }
 
     // ---------------------------------------
-    // Helper method for capturing data
+    // Streaming-specific Exceptions
     // ---------------------------------------
+
+    /**
+     * Exception thrown when an error occurs during streaming operations.
+     * 
+     * <p>This exception is thrown for streaming-specific errors such as:
+     * <ul>
+     *   <li>Stream parsing errors</li>
+     *   <li>Streaming protocol violations</li>
+     *   <li>Stream-specific configuration errors</li>
+     * </ul>
+     */
+    public static class StreamingException extends ApiClientException {
+        /**
+         * Creates a new StreamingException with the specified detail message.
+         *
+         * @param message the detail message
+         */
+        public StreamingException(String message) {
+            super(message);
+        }
+
+        /**
+         * Creates a new StreamingException with the specified detail message and cause.
+         *
+         * @param message the detail message
+         * @param cause the cause of the exception
+         */
+        public StreamingException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
+     * Exception thrown when a streaming connection fails or is interrupted.
+     * 
+     * <p>This exception is thrown when:
+     * <ul>
+     *   <li>The streaming connection is lost unexpectedly</li>
+     *   <li>The server closes the stream prematurely</li>
+     *   <li>Network issues interrupt the stream</li>
+     * </ul>
+     */
+    public static class StreamingConnectionException extends StreamingException {
+        /**
+         * Creates a new StreamingConnectionException with the specified detail message.
+         *
+         * @param message the detail message
+         */
+        public StreamingConnectionException(String message) {
+            super(message);
+        }
+
+        /**
+         * Creates a new StreamingConnectionException with the specified detail message and cause.
+         *
+         * @param message the detail message
+         * @param cause the cause of the exception
+         */
+        public StreamingConnectionException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
+     * Exception thrown when a streaming response is only partially received.
+     * 
+     * <p>This exception indicates that some data was received but the stream
+     * did not complete normally. It may be possible to retry or resume the stream.
+     */
+    public static class StreamingPartialResponseException extends StreamingException {
+        private final int partialDataLength;
+
+        /**
+         * Creates a new StreamingPartialResponseException with the specified detail message.
+         *
+         * @param message the detail message
+         * @param partialDataLength the amount of data received before the error
+         */
+        public StreamingPartialResponseException(String message, int partialDataLength) {
+            super(message);
+            this.partialDataLength = partialDataLength;
+        }
+
+        /**
+         * Creates a new StreamingPartialResponseException with the specified detail message and cause.
+         *
+         * @param message the detail message
+         * @param cause the cause of the exception
+         * @param partialDataLength the amount of data received before the error
+         */
+        public StreamingPartialResponseException(String message, Throwable cause, int partialDataLength) {
+            super(message, cause);
+            this.partialDataLength = partialDataLength;
+        }
+
+        /**
+         * Returns the amount of partial data that was received.
+         *
+         * @return the partial data length in bytes
+         */
+        public int getPartialDataLength() {
+            return partialDataLength;
+        }
+    }
+
+    /**
+     * Exception thrown when a streaming operation times out.
+     * 
+     * <p>This is different from regular API timeouts as it specifically
+     * relates to streaming operations that may have different timeout requirements.
+     */
+    public static class StreamingTimeoutException extends StreamingException {
+        /**
+         * Creates a new StreamingTimeoutException with the specified detail message.
+         *
+         * @param message the detail message
+         */
+        public StreamingTimeoutException(String message) {
+            super(message);
+        }
+
+        /**
+         * Creates a new StreamingTimeoutException with the specified detail message and cause.
+         *
+         * @param message the detail message
+         * @param cause the cause of the exception
+         */
+        public StreamingTimeoutException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    // ---------------------------------------
+    // Streaming API Methods
+    // ---------------------------------------
+
+    /**
+     * Sends a streaming API request without retry logic.
+     * 
+     * <p>This method processes streaming responses in real-time, calling the provided
+     * handler as data chunks arrive from the server. It's suitable for applications
+     * that need immediate access to partial results.
+     * 
+     * @param <T> The type of streaming request that extends ApiRequest
+     * @param <U> The type of data chunks in the streaming response
+     * @param request The streaming API request to send
+     * @param handler The handler to process streaming data as it arrives
+     * @return A CompletableFuture that completes when streaming is finished
+     * @throws IllegalArgumentException if request is not a streaming request
+     */
+
+
+
+
+
+    /**
+     * Executes a streaming operation with a timeout, matching the pattern of executeRequestWithTimeout.
+     * This method provides timeout control for streaming operations to ensure they don't run indefinitely.
+     *
+     * @param <U> The type of the streaming result data
+     * @param operation The streaming operation to execute
+     * @param remainingMs The maximum time to wait for the operation to complete, in milliseconds
+     * @return The result of the streaming operation
+     * @throws StreamingTimeoutException if the operation times out
+     * @throws StreamingException if the operation is interrupted or fails
+     */
+    protected <U> StreamingResult<U> executeStreamingWithTimeout(Supplier<StreamingResult<U>> operation, long remainingMs) {
+        final CompletableFuture<StreamingResult<U>> future = CompletableFuture.supplyAsync(operation, HTTP_CLIENT_EXECUTOR);
+
+        try {
+            if (remainingMs > 0) {
+                return future.get(remainingMs, TimeUnit.MILLISECONDS);
+            }
+            return future.get();
+        } catch (TimeoutException ex) {
+            future.cancel(true);
+            throw new StreamingTimeoutException("Streaming request timed out during execution", ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            future.cancel(true);
+            throw new StreamingException("Streaming request interrupted", ex);
+        } catch (ExecutionException ex) {
+            future.cancel(true);
+            if (ex.getCause() != null) {
+                if (ex.getCause() instanceof RuntimeException) {
+                    throw (RuntimeException) ex.getCause();
+                }
+                throw new StreamingException("Streaming execution failed", ex.getCause());
+            }
+            throw new StreamingException("Streaming execution failed", ex);
+        }
+    }
+
+    /**
+     * Creates a new StreamingTimeoutException with details about the timeout, matching createTimeoutException.
+     * This method provides consistent error messaging for streaming timeout scenarios.
+     *
+     * @param reason The reason for the timeout (may be null)
+     * @param maxDurationSeconds The maximum duration that was allowed in seconds
+     * @param cause The cause of the timeout (may be null)
+     * @return A new StreamingTimeoutException instance with formatted message
+     */
+    protected StreamingTimeoutException createStreamingTimeoutException(
+            String reason,
+            int maxDurationSeconds,
+            Throwable cause
+    ) {
+        String msg = "Maximum streaming execution time of " + maxDurationSeconds + "s reached!";
+        if (reason != null) msg += " " + reason;
+        return new StreamingTimeoutException(msg, cause);
+    }
+    
+    // ---------------------------------------
+    // New Streaming Methods for 2.1.0
+    // ---------------------------------------
+    
+    /**
+     * Executes a streaming request asynchronously without retry.
+     * This method is used internally by the new execute methods.
+     * 
+     * @param <T> The type of the API request that extends ApiRequest
+     * @param request The API request to execute as a stream
+     * @return A CompletableFuture containing the API response with streaming context as CompletableFuture<? extends ApiResponse<?>>
+     * @since 2.1.0
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private <T extends ApiRequest<?>> CompletableFuture<? extends ApiResponse<?>> executeStreamingAsync(T request) {
+        StreamingInfo streamingInfo = request.getStreamingInfo();
+        if (streamingInfo == null || !streamingInfo.isEnabled()) {
+            throw new IllegalArgumentException("Request is not configured for streaming");
+        }
+        
+        if (settings.getBeforeSendAction() != null) {
+            settings.getBeforeSendAction().accept(request);
+        }
+        
+        long startMillis = System.currentTimeMillis();
+        
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                // Run the streaming request and collect results
+                de.entwicklertraining.api.base.streaming.StreamingExecutionContext<T, Object> context = new de.entwicklertraining.api.base.streaming.StreamingExecutionContext<>();
+                StreamingResult<Object> result = runStreamingRequestNew(
+                    request, 
+                    (StreamingResponseHandler<Object>) streamingInfo.getHandler(),
+                    streamingInfo,
+                    context
+                );
+                
+                // Create streaming context from result
+                long endMillis = System.currentTimeMillis();
+                StreamingContext<Object> streamingContext = StreamingContext.fromStreamingResult(
+                    result,
+                    context.getChunks(),
+                    context.getMetadata(),
+                    startMillis,
+                    endMillis
+                );
+                
+                // Create response with streaming context  
+                ApiResponse response = request.createResponse("");  // Empty body for streaming
+                response.setStreamingContext(streamingContext);
+                
+                return (ApiResponse<?>) response;
+                
+            } catch (Exception e) {
+                throw new StreamingException("Streaming execution failed", e);
+            }
+        }, HTTP_CLIENT_EXECUTOR);
+    }
+    
+    /**
+     * Executes a streaming request asynchronously with retry.
+     * This method is used internally by the new execute methods.
+     * 
+     * @param <T> The type of the API request that extends ApiRequest
+     * @param request The API request to execute as a stream
+     * @return A CompletableFuture containing the API response with streaming context as CompletableFuture<? extends ApiResponse<?>>
+     * @since 2.1.0
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private <T extends ApiRequest<?>> CompletableFuture<? extends ApiResponse<?>> executeStreamingAsyncWithRetry(T request) {
+        StreamingInfo streamingInfo = request.getStreamingInfo();
+        if (streamingInfo == null || !streamingInfo.isEnabled()) {
+            throw new IllegalArgumentException("Request is not configured for streaming");
+        }
+        
+        if (settings.getBeforeSendAction() != null) {
+            settings.getBeforeSendAction().accept(request);
+        }
+        
+        long startMillis = System.currentTimeMillis();
+        
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                // Execute with retry logic
+                de.entwicklertraining.api.base.streaming.StreamingExecutionContext<T, Object> context = new de.entwicklertraining.api.base.streaming.StreamingExecutionContext<>();
+                StreamingResult<Object> result = executeStreamingWithRetryNew(
+                    () -> runStreamingRequestNew(
+                        request,
+                        (StreamingResponseHandler<Object>) streamingInfo.getHandler(),
+                        streamingInfo,
+                        context
+                    ),
+                    request
+                );
+                
+                // Create streaming context from result
+                long endMillis = System.currentTimeMillis();
+                StreamingContext<Object> streamingContext = StreamingContext.fromStreamingResult(
+                    result,
+                    context.getChunks(),
+                    context.getMetadata(),
+                    startMillis,
+                    endMillis
+                );
+                
+                // Create response with streaming context  
+                ApiResponse response = request.createResponse("");  // Empty body for streaming
+                response.setStreamingContext(streamingContext);
+                
+                return (ApiResponse<?>) response;
+                
+            } catch (Exception e) {
+                throw new StreamingException("Streaming execution with retry failed", e);
+            }
+        }, HTTP_CLIENT_EXECUTOR);
+    }
+
+    /**
+     * Executes a streaming request with the new architecture (without StreamingApiRequest).
+     * This method handles the actual HTTP streaming request execution including cancellation monitoring.
+     * 
+     * @param <T> The type of request that extends ApiRequest
+     * @param <U> The type of data chunks in the streaming response
+     * @param request The API request to execute as a stream
+     * @param handler The streaming response handler to process incoming data
+     * @param streamingInfo The streaming configuration including format and settings
+     * @param context The execution context for collecting streaming data and metadata
+     * @return The streaming result containing completion status and error information
+     * @throws StreamingException if the streaming request fails
+     * @since 2.1.0
+     */
+    private <T extends ApiRequest<?>, U> StreamingResult<U> runStreamingRequestNew(
+            T request,
+            StreamingResponseHandler<U> handler,
+            StreamingInfo streamingInfo,
+            de.entwicklertraining.api.base.streaming.StreamingExecutionContext<T, U> context) throws StreamingException {
+        
+        // Check for cancellation at start
+        if (request.getIsCanceledSupplier().get()) {
+            throw new CancellationException("Streaming request was cancelled before execution");
+        }
+        
+        String fullUrl = getBaseUrl() + request.getRelativeUrl();
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(fullUrl))
+                .header("Content-Type", request.getContentType())
+                .header("Accept", streamingInfo.getFormat().getAcceptHeader())
+                .header("Cache-Control", "no-cache");
+        
+        // Apply global headers from HTTP configuration
+        httpConfig.getGlobalHeaders().forEach(builder::header);
+        
+        // Apply request modifiers from HTTP configuration
+        httpConfig.getRequestModifiers().forEach(modifier -> modifier.accept(builder));
+        
+        // Apply request-specific headers
+        for (Map.Entry<String, String> entry : request.getAdditionalHeaders().entrySet()) {
+            builder.header(entry.getKey(), entry.getValue());
+        }
+        
+        // Add streaming-specific headers from config
+        StreamingConfig config = streamingInfo.getConfigOrDefault();
+        if (config != null && config.getLastEventId().isPresent()) {
+            builder.header("Last-Event-ID", config.getLastEventId().get());
+        }
+        
+        // Set HTTP method
+        String method = request.getHttpMethod().toUpperCase();
+        switch (method) {
+            case "POST" -> {
+                if (request.getContentType().startsWith("multipart/form-data")) {
+                    byte[] bodyBytes = request.getBodyBytes();
+                    builder.POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes));
+                } else {
+                    builder.POST(HttpRequest.BodyPublishers.ofString(request.getBody()));
+                }
+            }
+            case "GET" -> builder.GET();
+            case "DELETE" -> builder.DELETE();
+            default -> throw new StreamingException("Unsupported HTTP method for streaming: " + method);
+        }
+        
+        HttpRequest httpRequest = builder.build();
+        
+        CompletableFuture<Void> cancelWatcher = null;
+        try {
+            // Send streaming request
+            CompletableFuture<HttpResponse<Stream<String>>> future = 
+                httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofLines());
+            
+            // Set up cancellation watcher
+            cancelWatcher = CompletableFuture.runAsync(() -> {
+                try {
+                    while (!future.isDone()) {
+                        if (request.getIsCanceledSupplier().get() || handler.shouldCancel()) {
+                            future.cancel(true);
+                            break;
+                        }
+                        Thread.sleep(100);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }, CANCEL_WATCHER_EXECUTOR);
+            
+            // Get the response
+            HttpResponse<Stream<String>> response;
+            if (request.getMaxExecutionTimeInSeconds() > 0) {
+                response = future.get(request.getMaxExecutionTimeInSeconds(), TimeUnit.SECONDS);
+            } else {
+                response = future.get();
+            }
+            
+            int statusCode = response.statusCode();
+            if (statusCode != 200) {
+                // Handle non-200 status codes
+                StatusCodeExceptionRegistration reg = statusCodeExceptions.get(statusCode);
+                if (reg != null) {
+                    throw createException(reg, "Streaming request failed with status " + statusCode);
+                }
+                throw new StreamingConnectionException("Streaming request failed with status " + statusCode);
+            }
+            
+            // Process the streaming response
+            return processStreamingResponseNew(request, response, handler, streamingInfo, context);
+            
+        } catch (CancellationException e) {
+            throw new StreamingException("Streaming request was canceled", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new StreamingException("Streaming request was interrupted", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            if (e.getCause() != null) {
+                throw new StreamingException("Streaming request execution failed", e.getCause());
+            }
+            throw new StreamingException("Streaming request execution failed", e);
+        } catch (TimeoutException e) {
+            throw new StreamingTimeoutException("Streaming request timed out after " + request.getMaxExecutionTimeInSeconds() + " seconds", e);
+        } finally {
+            // Cancel the watcher
+            if (cancelWatcher != null) {
+                cancelWatcher.cancel(true);
+            }
+        }
+    }
+    
+    /**
+     * Processes the streaming HTTP response with the new architecture.
+     * This method handles line-by-line processing of streaming data using the appropriate processor.
+     * 
+     * @param <T> The type of request that extends ApiRequest
+     * @param <U> The type of data chunks in the streaming response  
+     * @param request The original request that initiated the stream
+     * @param response The HTTP response containing the streaming data as a Stream of lines
+     * @param handler The response handler to process each data chunk
+     * @param streamingInfo The streaming configuration including format settings
+     * @param context The execution context for collecting streaming data and metadata
+     * @return The streaming result indicating completion status and any errors
+     * @since 2.1.0
+     */
+    private <T extends ApiRequest<?>, U> StreamingResult<U> processStreamingResponseNew(
+            T request,
+            HttpResponse<Stream<String>> response,
+            StreamingResponseHandler<U> handler,
+            StreamingInfo streamingInfo,
+            de.entwicklertraining.api.base.streaming.StreamingExecutionContext<T, U> context) {
+        
+        StreamProcessor<U> processor = StreamProcessorFactory.createProcessor(
+            streamingInfo.getFormat(),
+            (Class<U>) Object.class  // Generic type for flexibility
+        );
+        
+        StreamingResult<U> result = new StreamingResult<>();
+        boolean streamCompleted = false;
+        int linesProcessed = 0;
+        
+        handler.onStreamStart();
+        
+        try (Stream<String> lines = response.body()) {
+            for (String line : (Iterable<String>) lines::iterator) {
+                if (Thread.currentThread().isInterrupted() || handler.shouldCancel()) {
+                    handler.onError(new StreamingException("Stream was canceled"));
+                    result.setCanceled(true);
+                    break;
+                }
+                
+                try {
+                    processor.processLine(line, new StreamingResponseHandler<U>() {
+                        @Override
+                        public void onStreamStart() {}
+                        
+                        @Override
+                        public void onData(U data) {
+                            handler.onData(data);
+                            context.addChunk(data);
+                        }
+                        
+                        @Override
+                        public void onChunk(U chunk) {
+                            handler.onChunk(chunk);
+                            context.addChunk(chunk);
+                        }
+                        
+                        @Override
+                        public void onMetadata(Map<String, Object> metadata) {
+                            handler.onMetadata(metadata);
+                            metadata.forEach(context::addMetadata);
+                        }
+                        
+                        @Override
+                        public void onComplete() {
+                            handler.onComplete();
+                        }
+                        
+                        @Override
+                        public void onError(Throwable error) {
+                            handler.onError(error);
+                        }
+                        
+                        @Override
+                        public boolean shouldCancel() {
+                            return handler.shouldCancel();
+                        }
+                    });
+                    linesProcessed++;
+                    
+                    if (processor.isCompletionLine(line)) {
+                        streamCompleted = true;
+                        break;
+                    }
+                    
+                } catch (StreamProcessor.StreamProcessingException e) {
+                    logger.warn("Error processing streaming line: {}", e.getMessage());
+                    // Continue processing other lines
+                } catch (Exception e) {
+                    logger.error("Unexpected error processing streaming line", e);
+                    handler.onError(e);
+                    result.setError(e);
+                    break;
+                }
+            }
+            
+            if (streamCompleted) {
+                handler.onComplete();
+                result.setCompleted(true);
+            } else if (!result.isCanceled() && result.getError() == null) {
+                // Stream ended without completion signal
+                StreamingPartialResponseException partialException = 
+                    new StreamingPartialResponseException("Stream ended without completion signal", linesProcessed);
+                handler.onError(partialException);
+                result.setError(partialException);
+            }
+            
+        } catch (Exception e) {
+            StreamingConnectionException connectionException = 
+                new StreamingConnectionException("Error reading streaming response", e);
+            handler.onError(connectionException);
+            result.setError(connectionException);
+        }
+        
+        result.setLinesProcessed(linesProcessed);
+        return result;
+    }
+    
+    /**
+     * Executes a streaming operation with retry logic using exponential backoff (new architecture).
+     * This method applies the same retry logic as regular requests to streaming operations.
+     * 
+     * @param <U> The type of streaming result data
+     * @param operation The streaming operation to execute with retry logic
+     * @param request The request being processed (used for timeout and cancellation checks)
+     * @return The streaming result from the successful operation
+     * @throws StreamingException if maximum retries are exceeded or operation fails permanently
+     * @since 2.1.0
+     */
+    private <U> StreamingResult<U> executeStreamingWithRetryNew(
+            Supplier<StreamingResult<U>> operation,
+            ApiRequest<?> request) throws StreamingException {
+        
+        final long startTimeMs = System.currentTimeMillis();
+        final int maxDurationSeconds = request.getMaxExecutionTimeInSeconds();
+        final long maxDurationMs = maxDurationSeconds * 1000L;
+        
+        String latestReason = null;
+        Throwable latestException = null;
+        
+        for (int attempt = 1; attempt <= settings.getMaxRetries(); attempt++) {
+            try {
+                long elapsedMs = System.currentTimeMillis() - startTimeMs;
+                long remainingMs = maxDurationMs - elapsedMs;
+                
+                if (maxDurationMs > 0 && remainingMs <= 0) {
+                    throw new StreamingTimeoutException(
+                        "Maximum streaming duration of " + maxDurationSeconds + "s exceeded. " + latestReason);
+                }
+                
+                return operation.get();
+                
+            } catch (Throwable ex) {
+                if (isRetryableStreamingException(ex)) {
+                    latestReason = "Retriable streaming error: " + ex.getMessage();
+                    latestException = ex;
+                } else {
+                    // Non-retriable error, throw immediately
+                    if (ex instanceof StreamingException) {
+                        throw (StreamingException) ex;
+                    }
+                    throw new StreamingException("Non-retriable streaming error", ex);
+                }
+            }
+            
+            if (attempt == settings.getMaxRetries()) {
+                throw new StreamingException(
+                    "Maximum streaming retries of " + settings.getMaxRetries() + " exhausted. " + latestReason,
+                    latestException);
+            }
+            
+            // Apply exponential backoff before retry
+            long elapsedMs = System.currentTimeMillis() - startTimeMs;
+            long remainingMs = maxDurationMs - elapsedMs;
+            if (maxDurationMs > 0 && remainingMs <= 0) {
+                throw new StreamingTimeoutException(
+                    "Maximum streaming duration of " + maxDurationSeconds + "s exceeded during retry backoff");
+            }
+            
+            long durationOfNextSleep = calculateNextSleep(settings.getInitialDelayMs());
+            durationOfNextSleep = maybeAdjustSleepForFinalRetry(maxDurationSeconds, durationOfNextSleep, remainingMs);
+            
+            try {
+                applySleep(durationOfNextSleep, remainingMs);
+            } catch (ApiTimeoutException e) {
+                throw new StreamingTimeoutException("Streaming retry timeout", e);
+            }
+        }
+        
+        throw new StreamingException("Streaming retry logic exhausted unexpectedly.");
+    }
+
+    /**
+     * Creates a new StreamingException indicating that all retry attempts were exhausted, matching createRetriesExhaustedException.
+     * This method provides consistent error messaging when streaming retry limits are reached.
+     *
+     * @param reason The reason for the failure (may be null)
+     * @param cause The cause of the failure (may be null)
+     * @return A new StreamingException instance with formatted message including retry count
+     */
+    protected StreamingException createStreamingRetriesExhaustedException(
+            String reason,
+            Throwable cause
+    ) {
+        String msg = "Maximum streaming retries of " + settings.getMaxRetries() + " exhausted!";
+        if (reason != null) msg += " " + reason;
+        return new StreamingException(msg, cause);
+    }
+
+    /**
+     * Checks if an exception is retriable for streaming operations.
+     * This method determines whether a streaming error should trigger a retry attempt.
+     * Connection errors, timeouts, and partial responses are generally retriable.
+     * 
+     * @param ex The exception to check for retry eligibility
+     * @return true if the exception should trigger a retry, false otherwise
+     */
+    private boolean isRetryableStreamingException(Throwable ex) {
+        // Connection errors are retriable
+        if (ex instanceof StreamingConnectionException) {
+            return true;
+        }
+        
+        // Timeout errors are retriable
+        if (ex instanceof StreamingTimeoutException) {
+            return true;
+        }
+        
+        // Partial responses might be retriable depending on configuration
+        if (ex instanceof StreamingPartialResponseException) {
+            return true;
+        }
+        
+        // General streaming exceptions are not retriable by default
+        if (ex instanceof StreamingException) {
+            return false;
+        }
+        
+        // Check if it matches any registered retriable status code exceptions
+        return isRetryableException(ex);
+    }
+
+    /**
+     * Result class for streaming operations.
+     * This class encapsulates the outcome of a streaming request including completion status,
+     * cancellation state, error information, and processing statistics.
+     */
+    public static class StreamingResult<T> {
+        private boolean completed = false;
+        private boolean canceled = false;
+        private Throwable error = null;
+        private int linesProcessed = 0;
+
+        public boolean isCompleted() { return completed; }
+        public void setCompleted(boolean completed) { this.completed = completed; }
+
+        public boolean isCanceled() { return canceled; }
+        public void setCanceled(boolean canceled) { this.canceled = canceled; }
+
+        public Throwable getError() { return error; }
+        public void setError(Throwable error) { this.error = error; }
+
+        public int getLinesProcessed() { return linesProcessed; }
+        public void setLinesProcessed(int linesProcessed) { this.linesProcessed = linesProcessed; }
+
+        public boolean isSuccess() { 
+            return completed && !canceled && error == null; 
+        }
+    }
+
+    // ---------------------------------------
+    // Helper classes and methods for capturing data
+    // ---------------------------------------
+    
+    /**
+     * Stores capture data for API call monitoring and debugging.
+     * This method is used internally to capture request/response data when configured.
+     *
+     * @param <T> The type of the API request that extends ApiRequest
+     * @param <U> The type of the API response that extends ApiResponse
+     * @param request The API request that was executed
+     * @param captureConsumer The consumer to handle the captured data
+     * @param finalResponse The response received (may be null on error)
+     * @param context The execution context containing request/response data
+     * @param finalException The exception that occurred (may be null on success)
+     * @param start The start time of the request
+     * @param end The end time of the request
+     * @param success Whether the request was successful
+     */
     private <T extends ApiRequest<U>, U extends ApiResponse<T>> void storeCaptureData(
             T request,
             Consumer<ApiCallCaptureInput> captureConsumer,
@@ -1098,6 +1963,13 @@ public abstract class ApiClient {
         ));
     }
 
+    /**
+     * Converts a throwable's stack trace to a string representation.
+     * This method is used internally for capturing exception details.
+     *
+     * @param throwable The throwable to convert
+     * @return The stack trace as a formatted string
+     */
     private String getStackTraceAsString(Throwable throwable) {
         StringBuilder sb = new StringBuilder();
         sb.append(throwable.toString()).append("\n");

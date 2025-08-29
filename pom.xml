@@ -4,7 +4,7 @@
 
   <groupId>de.entwicklertraining</groupId>
   <artifactId>api-base</artifactId>
-  <version>1.0.5</version>
+  <version>2.1.0</version>
   <packaging>jar</packaging>
 
   <name>REST API Base Library</name>
@@ -45,12 +45,25 @@
 
   <dependencies>
 
+    <!-- CancellationToken4J for standardized cancellation support -->
+    <dependency>
+      <groupId>de.entwicklertraining</groupId>
+      <artifactId>CancellationToken4J</artifactId>
+      <version>1.0.0</version>
+    </dependency>
 
     <!-- Jackson for JSON -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
       <version>2.19.0</version>
+    </dependency>
+
+    <!-- org.json for streaming API -->
+    <dependency>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>20250517</version>
     </dependency>
 
     <!-- SLF4J API -->

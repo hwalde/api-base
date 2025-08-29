@@ -1,8 +1,11 @@
 package de.entwicklertraining.api.base;
 
+import de.entwicklertraining.api.base.streaming.StreamingInfo;
+import de.entwicklertraining.cancellation.CancellationToken;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -26,9 +29,11 @@ import java.util.function.Supplier;
  *   <li>Request cancellation support</li>
  *   <li>Optional request/response capture for debugging</li>
  *   <li>Support for both text and binary payloads</li>
+ *   <li>Optional streaming configuration</li>
  * </ul>
  *
  * @param <R> The type of ApiResponse this request will return
+ * @since 2.0.0
  */
 public abstract class ApiRequest<R extends ApiResponse<?>> {
 
@@ -50,6 +55,12 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
     /** Supplier to check if the request has been canceled */
     private final Supplier<Boolean> isCanceledSupplier;
 
+    /** The cancellation token if one was provided (optional) */
+    private final CancellationToken cancellationToken;
+    
+    /** Streaming configuration for this request (optional) */
+    private final StreamingInfo streamingInfo;
+
     /**
      * Constructs a new ApiRequest using the provided builder.
      * <p>
@@ -62,7 +73,12 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
         this.maxExecutionTimeInSeconds = builderBase.maxExecutionTimeInSeconds;
         this.captureOnSuccess = builderBase.captureOnSuccess;
         this.captureOnError = builderBase.captureOnError;
-        this.isCanceledSupplier = builderBase.isCanceledSupplier;
+        this.cancellationToken = builderBase.cancellationToken;
+        this.streamingInfo = builderBase.getStreamingInfo();
+        // Combine external cancellation supplier with internal cancel flag
+        this.isCanceledSupplier = builderBase.isCanceledSupplier != null 
+            ? () -> this.canceled || builderBase.isCanceledSupplier.get()
+            : () -> this.canceled;
     }
 
     /**
@@ -120,6 +136,15 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
     }
 
     /**
+     * Gets the cancellation token associated with this request, if any.
+     * 
+     * @return Optional containing the cancellation token, or empty if none was set
+     */
+    public Optional<CancellationToken> getCancellationToken() {
+        return Optional.ofNullable(cancellationToken);
+    }
+
+    /**
      * Gets the relative URL path for this API request.
      * This should include the path and any query parameters, but not the base URL.
      *
@@ -171,6 +196,26 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
      */
     public boolean isBinaryResponse() {
         return false;
+    }
+    
+    /**
+     * Gets the streaming configuration for this request.
+     * 
+     * @return The streaming info for this request
+     * @since 2.1.0
+     */
+    public StreamingInfo getStreamingInfo() {
+        return streamingInfo;
+    }
+    
+    /**
+     * Checks if streaming is enabled for this request.
+     * 
+     * @return true if this request should be processed as a stream
+     * @since 2.1.0
+     */
+    public boolean isStreamingEnabled() {
+        return streamingInfo != null && streamingInfo.isEnabled();
     }
 
     /**
@@ -232,5 +277,24 @@ public abstract class ApiRequest<R extends ApiResponse<?>> {
      */
     public Map<String, String> getAdditionalHeaders() {
         return Collections.unmodifiableMap(additionalHeaders);
+    }
+    
+    /**
+     * Cancels this API request.
+     * 
+     * <p>This method sets the internal canceled flag to true, which can be checked
+     * by the API client to abort ongoing operations. The cancellation is cooperative -
+     * it's up to the API client implementation to regularly check the cancellation status
+     * and abort the operation accordingly.
+     * 
+     * <p>Once a request is canceled, subsequent calls to {@link #getIsCanceledSupplier()}
+     * will return a supplier that evaluates to true.
+     * 
+     * <p>Note that canceling a request does not guarantee immediate termination of 
+     * ongoing network operations, but provides a signal that the operation should
+     * be aborted when feasible.
+     */
+    public void cancel() {
+        this.canceled = true;
     }
 }
