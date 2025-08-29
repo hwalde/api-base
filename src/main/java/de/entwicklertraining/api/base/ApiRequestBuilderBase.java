@@ -280,6 +280,7 @@ public abstract class ApiRequestBuilderBase<B extends ApiRequestBuilderBase<B, R
     
     /**
      * @deprecated Use {@link #executeWithRetry()} instead
+     * @return The API response
      */
     @Deprecated(since = "2.1.0", forRemoval = false)
     public ApiResponse<R> executeWithExponentialBackoff() {

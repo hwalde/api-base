@@ -86,10 +86,21 @@ public interface StreamProcessor<T> {
      * Exception thrown when a fatal error occurs during stream processing.
      */
     class StreamProcessingException extends Exception {
+        /**
+         * Constructs a new StreamProcessingException with the specified detail message.
+         * 
+         * @param message the detail message
+         */
         public StreamProcessingException(String message) {
             super(message);
         }
         
+        /**
+         * Constructs a new StreamProcessingException with the specified detail message and cause.
+         * 
+         * @param message the detail message
+         * @param cause the cause of the exception
+         */
         public StreamProcessingException(String message, Throwable cause) {
             super(message, cause);
         }

@@ -155,6 +155,7 @@ public abstract class ApiClient {
      * retry policy in ApiClientSettings.
      *
      * @param <T> The type of the API request that extends ApiRequest
+     * @param <U> The type of the API response that extends ApiResponse
      * @param request The API request to send
      * @return The API response
      * @throws ApiTimeoutException if the request times out or maximum retries are exceeded
@@ -173,6 +174,7 @@ public abstract class ApiClient {
      * retry policy in ApiClientSettings.
      *
      * @param <T> The type of the API request that extends ApiRequest
+     * @param <U> The type of the API response that extends ApiResponse
      * @param request The API request to send
      * @return The API response
      * @throws ApiTimeoutException if the request times out or maximum retries are exceeded
@@ -218,7 +220,7 @@ public abstract class ApiClient {
      *
      * @param <T> The type of the API request that extends ApiRequest
      * @param request The API request to execute
-     * @return The API response as ApiResponse<?>
+     * @return The API response as ApiResponse&lt;?&gt;
      * @throws ApiTimeoutException if the request times out
      * @throws ApiClientException if there is an error executing the request
      * @since 2.1.0
@@ -239,7 +241,7 @@ public abstract class ApiClient {
      *
      * @param <T> The type of the API request that extends ApiRequest
      * @param request The API request to execute
-     * @return The API response as ApiResponse<?>
+     * @return The API response as ApiResponse&lt;?&gt;
      * @throws ApiTimeoutException if the request times out or maximum retries are exceeded
      * @throws ApiClientException if there is an error executing the request
      * @since 2.1.0
@@ -260,7 +262,7 @@ public abstract class ApiClient {
      *
      * @param <T> The type of the API request that extends ApiRequest
      * @param request The API request to execute
-     * @return A CompletableFuture containing the API response as CompletableFuture<? extends ApiResponse<?>>
+     * @return A CompletableFuture containing the API response as CompletableFuture&lt;? extends ApiResponse&lt;?&gt;&gt;
      * @since 2.1.0
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -280,7 +282,7 @@ public abstract class ApiClient {
      *
      * @param <T> The type of the API request that extends ApiRequest
      * @param request The API request to execute
-     * @return A CompletableFuture containing the API response as CompletableFuture<? extends ApiResponse<?>>
+     * @return A CompletableFuture containing the API response as CompletableFuture&lt;? extends ApiResponse&lt;?&gt;&gt;
      * @since 2.1.0
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -301,6 +303,7 @@ public abstract class ApiClient {
      * 
      * @deprecated Use {@link #execute(ApiRequest)} instead
      * @param <T> The type of the API request that extends ApiRequest
+     * @param <U> The type of the API response that extends ApiResponse
      * @param request The API request to send
      * @return The API response
      * @throws ApiTimeoutException if the request times out
@@ -1222,6 +1225,9 @@ public abstract class ApiClient {
      * did not complete normally. It may be possible to retry or resume the stream.
      */
     public static class StreamingPartialResponseException extends StreamingException {
+        /**
+         * The length of the partial data that was received before the stream ended.
+         */
         private final int partialDataLength;
 
         /**
@@ -1856,25 +1862,79 @@ public abstract class ApiClient {
      * Result class for streaming operations.
      * This class encapsulates the outcome of a streaming request including completion status,
      * cancellation state, error information, and processing statistics.
+     * 
+     * @param <T> The type of data being streamed
      */
     public static class StreamingResult<T> {
+        
+        /**
+         * Default constructor for StreamingResult.
+         */
+        public StreamingResult() {}
+        
         private boolean completed = false;
         private boolean canceled = false;
         private Throwable error = null;
         private int linesProcessed = 0;
 
+        /**
+         * Returns whether the streaming operation has completed.
+         * 
+         * @return true if the operation has completed, false otherwise
+         */
         public boolean isCompleted() { return completed; }
+        /**
+         * Sets the completion status of the streaming operation.
+         * 
+         * @param completed true if the operation has completed, false otherwise
+         */
         public void setCompleted(boolean completed) { this.completed = completed; }
 
+        /**
+         * Returns whether the streaming operation was canceled.
+         * 
+         * @return true if the operation was canceled, false otherwise
+         */
         public boolean isCanceled() { return canceled; }
+        /**
+         * Sets the cancellation status of the streaming operation.
+         * 
+         * @param canceled true if the operation was canceled, false otherwise
+         */
         public void setCanceled(boolean canceled) { this.canceled = canceled; }
 
+        /**
+         * Returns any error that occurred during the streaming operation.
+         * 
+         * @return the error that occurred, or null if no error occurred
+         */
         public Throwable getError() { return error; }
+        /**
+         * Sets the error that occurred during the streaming operation.
+         * 
+         * @param error the error that occurred, or null if no error occurred
+         */
         public void setError(Throwable error) { this.error = error; }
 
+        /**
+         * Returns the number of lines processed during the streaming operation.
+         * 
+         * @return the number of lines processed
+         */
         public int getLinesProcessed() { return linesProcessed; }
+        /**
+         * Sets the number of lines processed during the streaming operation.
+         * 
+         * @param linesProcessed the number of lines processed
+         */
         public void setLinesProcessed(int linesProcessed) { this.linesProcessed = linesProcessed; }
 
+        /**
+         * Returns whether the streaming operation completed successfully.
+         * A successful operation is one that completed without being canceled and without errors.
+         * 
+         * @return true if the operation completed successfully, false otherwise
+         */
         public boolean isSuccess() { 
             return completed && !canceled && error == null; 
         }

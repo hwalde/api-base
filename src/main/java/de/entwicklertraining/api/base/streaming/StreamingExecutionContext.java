@@ -15,6 +15,11 @@ import java.util.Map;
  */
 public class StreamingExecutionContext<T, U> {
     
+    /**
+     * Default constructor for StreamingExecutionContext.
+     */
+    public StreamingExecutionContext() {}
+    
     private final List<U> chunks = new ArrayList<>();
     private final Map<String, Object> metadata = new HashMap<>();
     private String responseBody;

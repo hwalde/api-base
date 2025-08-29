@@ -174,6 +174,8 @@ public class StreamingContext<T> {
      * @param result The streaming result from ApiClient
      * @param chunks The collected chunks
      * @param metadata The collected metadata
+     * @param startTimeMillis The start time in milliseconds
+     * @param endTimeMillis The end time in milliseconds
      * @param <T> The type of chunks
      * @return A new StreamingContext instance
      */
@@ -223,51 +225,112 @@ public class StreamingContext<T> {
         
         private Builder() {}
         
+        /**
+         * Sets the completion status.
+         * 
+         * @param completed true if completed, false otherwise
+         * @return this builder instance for method chaining
+         */
         public Builder<T> completed(boolean completed) {
             this.completed = completed;
             return this;
         }
         
+        /**
+         * Sets the cancellation status.
+         * 
+         * @param canceled true if canceled, false otherwise
+         * @return this builder instance for method chaining
+         */
         public Builder<T> canceled(boolean canceled) {
             this.canceled = canceled;
             return this;
         }
         
+        /**
+         * Sets the error that occurred.
+         * 
+         * @param error the error that occurred, or null if no error
+         * @return this builder instance for method chaining
+         */
         public Builder<T> error(Throwable error) {
             this.error = error;
             return this;
         }
         
+        /**
+         * Sets the number of lines processed.
+         * 
+         * @param linesProcessed the number of lines processed
+         * @return this builder instance for method chaining
+         */
         public Builder<T> linesProcessed(int linesProcessed) {
             this.linesProcessed = linesProcessed;
             return this;
         }
         
+        /**
+         * Adds a chunk to the collection.
+         * 
+         * @param chunk the chunk to add
+         * @return this builder instance for method chaining
+         */
         public Builder<T> addChunk(T chunk) {
             this.chunks.add(chunk);
             return this;
         }
         
+        /**
+         * Sets the chunks collection.
+         * 
+         * @param chunks the list of chunks to set
+         * @return this builder instance for method chaining
+         */
         public Builder<T> chunks(List<T> chunks) {
             this.chunks = new ArrayList<>(chunks);
             return this;
         }
         
+        /**
+         * Adds a metadata key-value pair.
+         * 
+         * @param key the metadata key
+         * @param value the metadata value
+         * @return this builder instance for method chaining
+         */
         public Builder<T> addMetadata(String key, Object value) {
             this.metadata.put(key, value);
             return this;
         }
         
+        /**
+         * Sets the metadata map.
+         * 
+         * @param metadata the metadata map to set
+         * @return this builder instance for method chaining
+         */
         public Builder<T> metadata(Map<String, Object> metadata) {
             this.metadata = new HashMap<>(metadata);
             return this;
         }
         
+        /**
+         * Sets the start time.
+         * 
+         * @param startTimeMillis the start time in milliseconds since epoch
+         * @return this builder instance for method chaining
+         */
         public Builder<T> startTime(long startTimeMillis) {
             this.startTimeMillis = startTimeMillis;
             return this;
         }
         
+        /**
+         * Sets the end time.
+         * 
+         * @param endTimeMillis the end time in milliseconds since epoch
+         * @return this builder instance for method chaining
+         */
         public Builder<T> endTime(long endTimeMillis) {
             this.endTimeMillis = endTimeMillis;
             return this;

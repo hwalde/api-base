@@ -420,7 +420,7 @@ public class ComprehensiveStreamingTest {
             .build();
             
         TestRequest.Builder builder3 = new TestRequest.Builder();
-        builder3.stream(StreamingFormat.SERVER_SENT_EVENTS, handler, config);
+        builder3.streamWithConfig(StreamingFormat.SERVER_SENT_EVENTS, handler, config);
         TestRequest request3 = builder3.build();
         
         StreamingInfo info3 = request3.getStreamingInfo();
@@ -455,7 +455,6 @@ public class ComprehensiveStreamingTest {
         }
         
         public static class Builder extends ApiRequestBuilderBase<Builder, TestRequest> {
-            @Override
             protected Builder self() { return this; }
             
             @Override
@@ -463,12 +462,10 @@ public class ComprehensiveStreamingTest {
                 return new TestRequest(this);
             }
             
-            @Override
             public ApiResponse<TestRequest> executeWithExponentialBackoff() {
                 throw new UnsupportedOperationException("Not implemented in test");
             }
             
-            @Override
             public ApiResponse<TestRequest> execute() {
                 throw new UnsupportedOperationException("Not implemented in test");
             }

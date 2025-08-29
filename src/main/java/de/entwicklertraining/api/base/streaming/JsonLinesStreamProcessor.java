@@ -163,9 +163,17 @@ public class JsonLinesStreamProcessor<T> implements StreamProcessor<T> {
     
     /**
      * Functional interface for extracting data from JSON objects.
+     * 
+     * @param <T> The type of data to extract from JSON objects
      */
     @FunctionalInterface
     public interface DataExtractor<T> {
+        /**
+         * Extracts data from a JSON object.
+         * 
+         * @param jsonObject the JSON object to extract data from
+         * @return the extracted data of type T
+         */
         T extract(JSONObject jsonObject);
     }
     
@@ -174,6 +182,12 @@ public class JsonLinesStreamProcessor<T> implements StreamProcessor<T> {
      */
     @FunctionalInterface
     public interface CompletionDetector {
+        /**
+         * Determines if the given JSON object represents a completion signal.
+         * 
+         * @param jsonObject the JSON object to check
+         * @return true if this object indicates completion, false otherwise
+         */
         boolean isCompletion(JSONObject jsonObject);
     }
     
@@ -182,6 +196,12 @@ public class JsonLinesStreamProcessor<T> implements StreamProcessor<T> {
      */
     @FunctionalInterface
     public interface MetadataDetector {
+        /**
+         * Determines if the given JSON object represents metadata.
+         * 
+         * @param jsonObject the JSON object to check
+         * @return true if this object contains metadata, false otherwise
+         */
         boolean isMetadata(JSONObject jsonObject);
     }
     
@@ -189,6 +209,11 @@ public class JsonLinesStreamProcessor<T> implements StreamProcessor<T> {
      * Common extractors and detectors for typical use cases.
      */
     public static class DefaultDetectors {
+        
+        /**
+         * Default constructor for DefaultDetectors utility class.
+         */
+        public DefaultDetectors() {}
         
         /**
          * Detects completion based on type field being "done".
@@ -224,6 +249,11 @@ public class JsonLinesStreamProcessor<T> implements StreamProcessor<T> {
      * Common data extractors for typical use cases.
      */
     public static class CommonExtractors {
+        
+        /**
+         * Default constructor for CommonExtractors utility class.
+         */
+        public CommonExtractors() {}
         
         /**
          * Extracts string content from a "content" field.

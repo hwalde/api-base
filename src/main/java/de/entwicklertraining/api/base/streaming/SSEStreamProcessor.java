@@ -193,6 +193,11 @@ public class SSEStreamProcessor<T> implements StreamProcessor<T> {
     public static class CommonExtractors {
         
         /**
+         * Default constructor for CommonExtractors utility class.
+         */
+        public CommonExtractors() {}
+        
+        /**
          * Extracts string content from a "content" field.
          */
         public static final DataExtractor<String> CONTENT_FIELD = json -> {

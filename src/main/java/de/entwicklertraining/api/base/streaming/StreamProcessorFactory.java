@@ -9,6 +9,11 @@ package de.entwicklertraining.api.base.streaming;
 public class StreamProcessorFactory {
     
     /**
+     * Default constructor for StreamProcessorFactory.
+     */
+    public StreamProcessorFactory() {}
+    
+    /**
      * Creates a stream processor for the specified format and data type.
      * 
      * <p>This method provides default configurations that work well for most

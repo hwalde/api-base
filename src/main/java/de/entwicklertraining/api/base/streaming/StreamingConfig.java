@@ -125,6 +125,11 @@ public class StreamingConfig {
      * Builder class for creating StreamingConfig instances.
      */
     public static class Builder {
+        
+        /**
+         * Default constructor for StreamingConfig Builder.
+         */
+        public Builder() {}
         private int bufferSize = 8192;
         private Duration streamTimeout = Duration.ofMinutes(5);
         private boolean enableReconnect = true;
@@ -134,6 +139,12 @@ public class StreamingConfig {
         private int maxCollectedDataSize = 10 * 1024 * 1024; // 10MB
         private String lastEventId = null;
         
+        /**
+         * Sets the buffer size for streaming operations.
+         * 
+         * @param bufferSize the buffer size in bytes, must be positive
+         * @return this builder instance for method chaining
+         */
         public Builder bufferSize(int bufferSize) {
             if (bufferSize <= 0) {
                 throw new IllegalArgumentException("Buffer size must be positive");
@@ -142,6 +153,12 @@ public class StreamingConfig {
             return this;
         }
         
+        /**
+         * Sets the timeout for streaming operations.
+         * 
+         * @param timeout the timeout duration, must be positive
+         * @return this builder instance for method chaining
+         */
         public Builder streamTimeout(Duration timeout) {
             if (timeout == null || timeout.isNegative()) {
                 throw new IllegalArgumentException("Stream timeout must be positive");
@@ -150,11 +167,23 @@ public class StreamingConfig {
             return this;
         }
         
+        /**
+         * Enables or disables automatic reconnection for streaming operations.
+         * 
+         * @param enable true to enable reconnection, false to disable
+         * @return this builder instance for method chaining
+         */
         public Builder enableReconnect(boolean enable) {
             this.enableReconnect = enable;
             return this;
         }
         
+        /**
+         * Sets the maximum number of reconnection attempts.
+         * 
+         * @param maxAttempts the maximum number of reconnect attempts, must be non-negative
+         * @return this builder instance for method chaining
+         */
         public Builder maxReconnectAttempts(int maxAttempts) {
             if (maxAttempts < 0) {
                 throw new IllegalArgumentException("Max reconnect attempts cannot be negative");
@@ -163,6 +192,12 @@ public class StreamingConfig {
             return this;
         }
         
+        /**
+         * Sets the delay between reconnection attempts.
+         * 
+         * @param delay the delay duration between reconnect attempts, must be positive
+         * @return this builder instance for method chaining
+         */
         public Builder reconnectDelay(Duration delay) {
             if (delay == null || delay.isNegative()) {
                 throw new IllegalArgumentException("Reconnect delay must be positive");
@@ -171,11 +206,23 @@ public class StreamingConfig {
             return this;
         }
         
+        /**
+         * Enables or disables data collection during streaming.
+         * 
+         * @param collect true to collect data, false to disable data collection
+         * @return this builder instance for method chaining
+         */
         public Builder collectData(boolean collect) {
             this.collectData = collect;
             return this;
         }
         
+        /**
+         * Sets the maximum size for collected data.
+         * 
+         * @param maxSize the maximum size in bytes for collected data, must be positive
+         * @return this builder instance for method chaining
+         */
         public Builder maxCollectedDataSize(int maxSize) {
             if (maxSize <= 0) {
                 throw new IllegalArgumentException("Max collected data size must be positive");
@@ -184,11 +231,22 @@ public class StreamingConfig {
             return this;
         }
         
+        /**
+         * Sets the last event ID for resuming streaming from a specific point.
+         * 
+         * @param eventId the last event ID to resume from, or null to start from the beginning
+         * @return this builder instance for method chaining
+         */
         public Builder lastEventId(String eventId) {
             this.lastEventId = eventId;
             return this;
         }
         
+        /**
+         * Builds a new StreamingConfig instance with the configured settings.
+         * 
+         * @return a new StreamingConfig instance
+         */
         public StreamingConfig build() {
             return new StreamingConfig(this);
         }
