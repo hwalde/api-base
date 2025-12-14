@@ -228,9 +228,7 @@ public abstract class ApiClient {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public <T extends ApiRequest<?>> ApiResponse<?> execute(T request) {
         if (request.isStreamingEnabled()) {
-            // TODO: Implement streaming in 2.2.0 - for now throw exception
-            throw new UnsupportedOperationException("Streaming via execute() will be implemented in version 2.2.0. " +
-                "Use the existing sendStreamingRequest() methods for now.");
+            return executeStreamingAsync(request).join();
         }
         return sendRequest((ApiRequest) request);
     }
@@ -249,9 +247,7 @@ public abstract class ApiClient {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public <T extends ApiRequest<?>> ApiResponse<?> executeWithRetry(T request) {
         if (request.isStreamingEnabled()) {
-            // TODO: Implement streaming in 2.2.0 - for now throw exception
-            throw new UnsupportedOperationException("Streaming via executeWithRetry() will be implemented in version 2.2.0. " +
-                "Use the existing sendStreamingRequestWithRetry() methods for now.");
+            return executeStreamingAsyncWithRetry(request).join();
         }
         return sendRequestWithRetry((ApiRequest) request);
     }
@@ -268,10 +264,7 @@ public abstract class ApiClient {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public <T extends ApiRequest<?>> CompletableFuture<? extends ApiResponse<?>> executeAsync(T request) {
         if (request.isStreamingEnabled()) {
-            // TODO: Implement streaming in 2.2.0 - for now throw exception
-            return CompletableFuture.failedFuture(new UnsupportedOperationException(
-                "Streaming via executeAsync() will be implemented in version 2.2.0. " +
-                "Use the existing sendStreamingRequest() methods for now."));
+            return executeStreamingAsync(request);
         }
         return CompletableFuture.supplyAsync(() -> (ApiResponse<?>) sendRequest((ApiRequest) request), HTTP_CLIENT_EXECUTOR);
     }
@@ -288,10 +281,7 @@ public abstract class ApiClient {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public <T extends ApiRequest<?>> CompletableFuture<? extends ApiResponse<?>> executeAsyncWithRetry(T request) {
         if (request.isStreamingEnabled()) {
-            // TODO: Implement streaming in 2.2.0 - for now throw exception
-            return CompletableFuture.failedFuture(new UnsupportedOperationException(
-                "Streaming via executeAsyncWithRetry() will be implemented in version 2.2.0. " +
-                "Use the existing sendStreamingRequestWithRetry() methods for now."));
+            return executeStreamingAsyncWithRetry(request);
         }
         return CompletableFuture.supplyAsync(() -> (ApiResponse<?>) sendRequestWithRetry((ApiRequest) request), HTTP_CLIENT_EXECUTOR);
     }
@@ -1417,8 +1407,8 @@ public abstract class ApiClient {
                     endMillis
                 );
                 
-                // Create response with streaming context  
-                ApiResponse response = request.createResponse("");  // Empty body for streaming
+                // Create response with streaming context - use empty JSON for streaming
+                ApiResponse response = request.createResponse("{}");
                 response.setStreamingContext(streamingContext);
                 
                 return (ApiResponse<?>) response;
@@ -1475,8 +1465,8 @@ public abstract class ApiClient {
                     endMillis
                 );
                 
-                // Create response with streaming context  
-                ApiResponse response = request.createResponse("");  // Empty body for streaming
+                // Create response with streaming context - use empty JSON for streaming
+                ApiResponse response = request.createResponse("{}");
                 response.setStreamingContext(streamingContext);
                 
                 return (ApiResponse<?>) response;
@@ -1585,12 +1575,21 @@ public abstract class ApiClient {
             
             int statusCode = response.statusCode();
             if (statusCode != 200) {
-                // Handle non-200 status codes
+                // Read the error response body for better error messages
+                String errorBody = "";
+                try (Stream<String> lines = response.body()) {
+                    errorBody = lines.collect(java.util.stream.Collectors.joining("\n"));
+                } catch (Exception e) {
+                    errorBody = "(could not read error body: " + e.getMessage() + ")";
+                }
+
+                // Handle non-200 status codes with full error details
+                String errorMessage = "Streaming request failed with status " + statusCode + ": " + errorBody;
                 StatusCodeExceptionRegistration reg = statusCodeExceptions.get(statusCode);
                 if (reg != null) {
-                    throw createException(reg, "Streaming request failed with status " + statusCode);
+                    throw createException(reg, errorMessage);
                 }
-                throw new StreamingConnectionException("Streaming request failed with status " + statusCode);
+                throw new StreamingConnectionException(errorMessage);
             }
             
             // Process the streaming response
@@ -1639,7 +1638,7 @@ public abstract class ApiClient {
         
         StreamProcessor<U> processor = StreamProcessorFactory.createProcessor(
             streamingInfo.getFormat(),
-            (Class<U>) Object.class  // Generic type for flexibility
+            (Class<U>) String.class  // Use String.class to enable OPENAI_STYLE extraction
         );
         
         StreamingResult<U> result = new StreamingResult<>();

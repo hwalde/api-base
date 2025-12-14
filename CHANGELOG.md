@@ -3,15 +3,23 @@
 All notable changes to this project will be documented in this file.
 
 ## [2.2.0] - 2025-12-14
+### Added
+- **NEW**: Streaming now fully integrated into public `execute()`, `executeWithRetry()`, `executeAsync()`, and `executeAsyncWithRetry()` methods
+- **NEW**: Error response body is now read and included in exception messages for streaming requests - enables debugging of API errors
+- **NEW**: `ROADMAP.md` documenting planned improvements for v3.0.0
+
 ### Fixed
 - **CRITICAL**: Fixed thread-safety issue in `StreamingExecutionContext` - now uses `CopyOnWriteArrayList` and `ConcurrentHashMap` instead of `ArrayList` and `HashMap`
 - **BREAKING**: `addMetadata(key, null)` now removes the key instead of storing null (ConcurrentHashMap does not support null values)
+- Fixed `StreamProcessorFactory.createProcessor()` to use `String.class` for proper OPENAI_STYLE extraction
+- Fixed streaming response creation to use `"{}"` instead of empty string to prevent JSON parsing errors
 
 ### Changed
 - Thread-safety tests now use virtual threads (`Thread.ofVirtual()`)
 
 ### Removed
 - Removed obsolete documentation files: `GENERIC_ISSUE.md`, `POSSIBLE_ISSUES.md`, `POTENTIAL_BUGS_2.md`, `THE_STATE_OF_STREAMING.md`
+- Removed `UnsupportedOperationException` placeholders from streaming execute methods
 
 ## [2.1.0] - 2025-08-29
 ### Added
