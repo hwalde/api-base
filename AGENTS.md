@@ -106,3 +106,68 @@ ApiHttpConfiguration basicAuthConfig = ApiHttpConfiguration.builder()
 
 ## Java Version
 Requires Java 21+ (configured with `maven.compiler.release=21`)
+
+## Maven Central Publishing
+
+### Voraussetzungen
+
+#### 1. Maven Central Credentials konfigurieren
+
+Die Maven Central Credentials müssen in `~/.m2/settings.xml` konfiguriert sein:
+
+```xml
+<servers>
+  <server>
+    <id>central</id>
+    <username>dein-sonatype-token-username</username>
+    <password>dein-sonatype-token-password</password>
+  </server>
+</servers>
+```
+
+#### 2. GPG-Schlüssel prüfen und erstellen
+
+**Prüfen ob GPG-Schlüssel vorhanden ist:**
+```bash
+gpg --list-secret-keys --keyid-format SHORT
+```
+
+**Falls kein GPG-Schlüssel vorhanden ist, erstellen:**
+```bash
+# GPG-Schlüssel generieren (ohne Passwort für automatisierte Builds)
+gpg --batch --gen-key <<EOF
+Key-Type: RSA
+Key-Length: 4096
+Name-Real: {Dein Name}
+Name-Email: {deine@email.de}
+Expire-Date: 0
+%no-protection
+%commit
+EOF
+
+# Schlüssel-ID abrufen
+gpg --list-secret-keys --keyid-format SHORT
+# Ausgabe zeigt z.B.: sec rsa4096/A3694C5B ...
+
+# Schlüssel zu Keyserver hochladen (WICHTIG für Maven Central!)
+gpg --keyserver keyserver.ubuntu.com --send-keys {KEY_ID}
+```
+
+### Deployment auf Maven Central
+
+```bash
+# Deploy mit GPG-Signierung
+mvn clean deploy -DskipTests -Dgpg.keyname={KEY_ID}
+```
+
+**Erwartete Ausgabe bei Erfolg:**
+```
+[INFO] Uploaded bundle successfully, deployment name: Deployment, deploymentId: xxx
+[INFO] Deployment xxx has been validated.
+[INFO] BUILD SUCCESS
+```
+
+### Verifizierung
+
+Nach erfolgreichem Deploy:
+- **Maven Central:** Nach 10-30 Minuten verfügbar unter https://central.sonatype.com

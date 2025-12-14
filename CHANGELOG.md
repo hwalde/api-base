@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2025-12-14
+### Fixed
+- **CRITICAL**: Fixed thread-safety issue in `StreamingExecutionContext` - now uses `CopyOnWriteArrayList` and `ConcurrentHashMap` instead of `ArrayList` and `HashMap`
+- **BREAKING**: `addMetadata(key, null)` now removes the key instead of storing null (ConcurrentHashMap does not support null values)
+
+### Changed
+- Thread-safety tests now use virtual threads (`Thread.ofVirtual()`)
+
+### Removed
+- Removed obsolete documentation files: `GENERIC_ISSUE.md`, `POSSIBLE_ISSUES.md`, `POTENTIAL_BUGS_2.md`, `THE_STATE_OF_STREAMING.md`
+
 ## [2.1.0] - 2025-08-29
 ### Added
 - **NEW**: Unified streaming architecture with `StreamingInfo` and `StreamingContext` classes

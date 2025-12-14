@@ -166,17 +166,22 @@ public class StreamingExecutionContextTest {
     }
 
     @Test
-    @DisplayName("Context should handle metadata with null values")
+    @DisplayName("Context should handle metadata with null values by removing the key")
     void testNullMetadata() {
+        // Adding null should not add the key (ConcurrentHashMap doesn't support null values)
         context.addMetadata("null_key", null);
-        assertEquals(1, context.getMetadata().size());
-        assertTrue(context.getMetadata().containsKey("null_key"));
-        assertNull(context.getMetadata().get("null_key"));
-        
+        assertEquals(0, context.getMetadata().size());
+        assertFalse(context.getMetadata().containsKey("null_key"));
+
+        // Add a real key
         context.addMetadata("real_key", "real_value");
-        assertEquals(2, context.getMetadata().size());
+        assertEquals(1, context.getMetadata().size());
         assertEquals("real_value", context.getMetadata().get("real_key"));
-        assertNull(context.getMetadata().get("null_key"));
+
+        // Setting existing key to null should remove it
+        context.addMetadata("real_key", null);
+        assertEquals(0, context.getMetadata().size());
+        assertFalse(context.getMetadata().containsKey("real_key"));
     }
 
     @Test
@@ -245,43 +250,43 @@ public class StreamingExecutionContextTest {
     }
 
     @Test
-    @DisplayName("Context should be thread-safe for basic operations")
+    @DisplayName("Context should be thread-safe for basic operations using virtual threads")
     void testBasicThreadSafety() throws InterruptedException {
         final int numThreads = 10;
         final int operationsPerThread = 100;
         Thread[] threads = new Thread[numThreads];
-        
-        // Create threads that add chunks and metadata
+
+        // Create virtual threads that add chunks and metadata
         for (int t = 0; t < numThreads; t++) {
             final int threadId = t;
-            threads[t] = new Thread(() -> {
+            threads[t] = Thread.ofVirtual().unstarted(() -> {
                 for (int i = 0; i < operationsPerThread; i++) {
                     context.addChunk("thread_" + threadId + "_chunk_" + i);
                     context.addMetadata("thread_" + threadId + "_key_" + i, "value_" + i);
                 }
             });
         }
-        
-        // Start all threads
+
+        // Start all virtual threads
         for (Thread thread : threads) {
             thread.start();
         }
-        
+
         // Wait for all threads to complete
         for (Thread thread : threads) {
             thread.join();
         }
-        
-        // Verify all data was added (allowing for potential race conditions in threading)
+
+        // With thread-safe collections, all operations should succeed
         int expectedOperations = numThreads * operationsPerThread;
         int actualChunks = context.getChunks().size();
         int actualMetadata = context.getMetadata().size();
-        
-        // Allow significant tolerance for threading implementation differences
-        assertTrue(actualChunks >= expectedOperations - 100 || actualChunks >= expectedOperations * 0.9, 
-                   "Chunks: expected at least " + (expectedOperations - 100) + " but got " + actualChunks);
-        assertTrue(actualMetadata >= expectedOperations - 100 || actualMetadata >= expectedOperations * 0.9, 
-                   "Metadata: expected at least " + (expectedOperations - 100) + " but got " + actualMetadata);
+
+        // With CopyOnWriteArrayList and ConcurrentHashMap, we expect exactly all operations
+        assertEquals(expectedOperations, actualChunks,
+                   "Chunks: expected " + expectedOperations + " but got " + actualChunks);
+        assertEquals(expectedOperations, actualMetadata,
+                   "Metadata: expected " + expectedOperations + " but got " + actualMetadata);
     }
 
     /**

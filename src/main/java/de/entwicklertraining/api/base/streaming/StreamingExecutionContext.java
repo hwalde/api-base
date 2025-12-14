@@ -1,9 +1,9 @@
 package de.entwicklertraining.api.base.streaming;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Internal context for collecting data during streaming execution.
@@ -20,8 +20,8 @@ public class StreamingExecutionContext<T, U> {
      */
     public StreamingExecutionContext() {}
     
-    private final List<U> chunks = new ArrayList<>();
-    private final Map<String, Object> metadata = new HashMap<>();
+    private final List<U> chunks = new CopyOnWriteArrayList<>();
+    private final Map<String, Object> metadata = new ConcurrentHashMap<>();
     private String responseBody;
     private byte[] responseBytes;
     
@@ -45,12 +45,17 @@ public class StreamingExecutionContext<T, U> {
     
     /**
      * Adds metadata to the context.
-     * 
+     * If value is null, the key will be removed from metadata.
+     *
      * @param key The metadata key
-     * @param value The metadata value
+     * @param value The metadata value (null removes the key)
      */
     public void addMetadata(String key, Object value) {
-        metadata.put(key, value);
+        if (value == null) {
+            metadata.remove(key);
+        } else {
+            metadata.put(key, value);
+        }
     }
     
     /**
