@@ -1596,7 +1596,7 @@ public abstract class ApiClient {
             return processStreamingResponseNew(request, response, handler, streamingInfo, context);
             
         } catch (CancellationException e) {
-            throw new StreamingException("Streaming request was canceled", e);
+            throw e; // Re-throw to allow consistent cancellation handling
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new StreamingException("Streaming request was interrupted", e);
