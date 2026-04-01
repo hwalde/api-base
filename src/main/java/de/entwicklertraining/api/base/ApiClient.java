@@ -1636,10 +1636,13 @@ public abstract class ApiClient {
             StreamingInfo streamingInfo,
             de.entwicklertraining.api.base.streaming.StreamingExecutionContext<T, U> context) {
         
-        StreamProcessor<U> processor = StreamProcessorFactory.createProcessor(
-            streamingInfo.getFormat(),
-            (Class<U>) String.class  // Use String.class to enable OPENAI_STYLE extraction
-        );
+        @SuppressWarnings("unchecked")
+        StreamProcessor<U> processor = streamingInfo.getCustomProcessor()
+                .map(p -> (StreamProcessor<U>) p)
+                .orElseGet(() -> StreamProcessorFactory.createProcessor(
+                        streamingInfo.getFormat(),
+                        (Class<U>) String.class
+                ));
         
         StreamingResult<U> result = new StreamingResult<>();
         boolean streamCompleted = false;

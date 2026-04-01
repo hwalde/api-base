@@ -16,13 +16,14 @@ public class StreamingInfo {
     private final StreamingFormat format;
     private final StreamingResponseHandler<?> handler;
     private final StreamingConfig config;
+    private final StreamProcessor<?> customProcessor;
     
     /**
      * Creates a non-streaming info object.
      * This is the default for requests that don't use streaming.
      */
     public StreamingInfo() {
-        this(false, null, null, null);
+        this(false, null, null, null, null);
     }
     
     /**
@@ -32,7 +33,7 @@ public class StreamingInfo {
      * @param handler The handler to process streaming responses
      */
     public StreamingInfo(StreamingFormat format, StreamingResponseHandler<?> handler) {
-        this(true, format, handler, null);
+        this(true, format, handler, null, null);
     }
     
     /**
@@ -43,7 +44,7 @@ public class StreamingInfo {
      * @param config Custom streaming configuration
      */
     public StreamingInfo(StreamingFormat format, StreamingResponseHandler<?> handler, StreamingConfig config) {
-        this(true, format, handler, config);
+        this(true, format, handler, config, null);
     }
     
     /**
@@ -54,11 +55,12 @@ public class StreamingInfo {
      * @param handler The handler (can be null if not enabled)
      * @param config Optional custom configuration
      */
-    private StreamingInfo(boolean enabled, StreamingFormat format, StreamingResponseHandler<?> handler, StreamingConfig config) {
+    private StreamingInfo(boolean enabled, StreamingFormat format, StreamingResponseHandler<?> handler, StreamingConfig config, StreamProcessor<?> customProcessor) {
         this.enabled = enabled;
         this.format = format;
         this.handler = handler;
         this.config = config;
+        this.customProcessor = customProcessor;
         
         // Validate that if streaming is enabled, format and handler must be provided
         if (enabled) {
@@ -102,6 +104,16 @@ public class StreamingInfo {
     public Optional<StreamingConfig> getConfig() {
         return Optional.ofNullable(config);
     }
+
+    /**
+     * Gets the optional custom stream processor.
+     * When present, this processor overrides the default factory-created processor.
+     *
+     * @return Optional containing the custom processor if present
+     */
+    public Optional<StreamProcessor<?>> getCustomProcessor() {
+        return Optional.ofNullable(customProcessor);
+    }
     
     /**
      * Gets the streaming configuration or a default if not present.
@@ -135,6 +147,7 @@ public class StreamingInfo {
         private StreamingFormat format;
         private StreamingResponseHandler<?> handler;
         private StreamingConfig config;
+        private StreamProcessor<?> customProcessor;
         
         private Builder() {}
         
@@ -171,7 +184,18 @@ public class StreamingInfo {
             this.config = config;
             return this;
         }
-        
+
+        /**
+         * Sets a custom stream processor that overrides the default factory-created processor.
+         *
+         * @param processor The custom processor to use
+         * @return This builder
+         */
+        public Builder customProcessor(StreamProcessor<?> processor) {
+            this.customProcessor = processor;
+            return this;
+        }
+
         /**
          * Disables streaming (creates a non-streaming info).
          * 
@@ -182,6 +206,7 @@ public class StreamingInfo {
             this.format = null;
             this.handler = null;
             this.config = null;
+            this.customProcessor = null;
             return this;
         }
         
@@ -196,7 +221,7 @@ public class StreamingInfo {
                 throw new IllegalStateException(
                     "StreamingFormat and StreamingResponseHandler are required when streaming is enabled");
             }
-            return new StreamingInfo(enabled, format, handler, config);
+            return new StreamingInfo(enabled, format, handler, config, customProcessor);
         }
     }
     
