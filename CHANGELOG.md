@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.2] - 2026-04-01
+### Added
+- Optional custom `StreamProcessor` support in `StreamingInfo` - allows consumers to override the default factory-created processor via `StreamingInfo.builder().customProcessor(processor).build()`. Enables use cases like raw JSON extraction for tool call parsing in streaming responses.
+
 ## [2.2.0] - 2025-12-14
 ### Added
 - **NEW**: Streaming now fully integrated into public `execute()`, `executeWithRetry()`, `executeAsync()`, and `executeAsyncWithRetry()` methods

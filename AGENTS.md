@@ -33,6 +33,16 @@ The library follows a builder pattern with these key abstractions:
 3. **Response Implementation**: Extend `ApiResponse<RequestType>`, store parsed data
 4. **Builder Implementation**: Extend `ApiRequestBuilderBase`, provide fluent configuration methods
 
+### Streaming Architecture
+The streaming system supports SSE, JSON Lines, and raw text formats:
+- **`StreamingInfo`**: Holds format, handler, config, and optional custom `StreamProcessor`
+- **`StreamProcessor`**: Interface for format-specific line parsing. Implementations: `SSEStreamProcessor`, `JsonLinesStreamProcessor`
+- **`SSEStreamProcessor.CommonExtractors`**: `OPENAI_STYLE` (default for String - extracts `choices[0].delta.content`), `RAW_JSON` (returns full JSON), `CONTENT_FIELD`
+- **`StreamProcessorFactory`**: Creates default processors. Override via `StreamingInfo.builder().customProcessor()` for custom extraction
+- **`StreamingResponseHandler<T>`**: Callback interface with `onData()`, `onComplete()`, `onError()`, `onStreamStart()`, `onMetadata()`, `shouldCancel()`
+- **`StreamingContext<T>`**: Immutable result after streaming (chunks, metadata, duration, success)
+- **Execute methods**: `execute()` auto-detects streaming; `executeAsync()` returns CompletableFuture. Both respect `StreamingInfo` on the request.
+
 ### Exception Handling
 The library provides built-in HTTP status code exceptions:
 - `HTTP_400_RequestRejectedException`
