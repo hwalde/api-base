@@ -1,6 +1,9 @@
 package de.entwicklertraining.api.base;
 
 import de.entwicklertraining.api.base.streaming.StreamingContext;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -28,6 +31,9 @@ public abstract class ApiResponse<Q extends ApiRequest<?>> {
     
     /** Optional streaming context if this response was from a streaming operation */
     private StreamingContext<?> streamingContext;
+
+    /** The HTTP response headers of the exchange this response was parsed from (first value per name) */
+    private Map<String, String> responseHeaders = Map.of();
 
     /**
      * Creates a new API response for the given request.
@@ -94,5 +100,54 @@ public abstract class ApiResponse<Q extends ApiRequest<?>> {
      */
     protected void setStreamingContext(StreamingContext<?> streamingContext) {
         this.streamingContext = streamingContext;
+    }
+
+    /**
+     * Gets the HTTP response headers of the exchange this response was parsed from,
+     * first value per name, or an empty map when the transport recorded none.
+     * <p>
+     * Header names keep their original spelling; look them up with
+     * {@link #getResponseHeader(String)} for a case-insensitive match.
+     *
+     * @return The response headers (never null, immutable)
+     * @since 2.3.0
+     */
+    public Map<String, String> getResponseHeaders() {
+        return responseHeaders;
+    }
+
+    /**
+     * Gets the value of the given response header, matched case-insensitively.
+     *
+     * @param name The header name
+     * @return The header value, or null when the header was not sent or name is null
+     * @since 2.3.0
+     */
+    public String getResponseHeader(String name) {
+        if (name == null) {
+            return null;
+        }
+        for (Map.Entry<String, String> entry : responseHeaders.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(name)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Records the HTTP response headers of the exchange this response was parsed from.
+     * Called by the transport with the flattened header map; public so that a layer
+     * synthesizing a response from a completed HTTP exchange (e.g. a tool-call loop
+     * accumulating one final response from several turns) can copy the headers of the
+     * last real exchange onto the synthesized response.
+     *
+     * @param responseHeaders The response headers, first value per name; null records no headers
+     * @since 2.3.0
+     */
+    public void setResponseHeaders(Map<String, String> responseHeaders) {
+        this.responseHeaders = responseHeaders == null
+                ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(responseHeaders));
     }
 }

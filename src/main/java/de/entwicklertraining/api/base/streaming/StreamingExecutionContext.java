@@ -24,6 +24,7 @@ public class StreamingExecutionContext<T, U> {
     private final Map<String, Object> metadata = new ConcurrentHashMap<>();
     private String responseBody;
     private byte[] responseBytes;
+    private volatile Map<String, String> responseHeaders = Map.of();
     
     /**
      * Adds a chunk to the context.
@@ -104,6 +105,28 @@ public class StreamingExecutionContext<T, U> {
     }
     
     /**
+     * Records the HTTP response headers of the streaming exchange (first value per name).
+     *
+     * @param responseHeaders The response headers; null records no headers
+     * @since 2.3.0
+     */
+    public void setResponseHeaders(Map<String, String> responseHeaders) {
+        this.responseHeaders = responseHeaders == null
+                ? Map.of()
+                : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(responseHeaders));
+    }
+    
+    /**
+     * Gets the HTTP response headers of the streaming exchange (first value per name).
+     * 
+     * @return The response headers (never null)
+     * @since 2.3.0
+     */
+    public Map<String, String> getResponseHeaders() {
+        return responseHeaders;
+    }
+    
+    /**
      * Clears all collected data.
      */
     public void clear() {
@@ -111,5 +134,6 @@ public class StreamingExecutionContext<T, U> {
         metadata.clear();
         responseBody = null;
         responseBytes = null;
+        responseHeaders = Map.of();
     }
 }

@@ -134,6 +134,12 @@ public abstract class ApiClient {
     /**
      * Registers a custom exception type to be thrown when a specific HTTP status code is received.
      * This allows for type-safe error handling based on HTTP status codes.
+     * <p>
+     * When the exception class declares a public
+     * {@code (String message, ApiErrorContext apiErrorContext)} constructor, the transport
+     * passes the status code, response body and response headers of the failed exchange to
+     * it; otherwise the class is instantiated with the composed message only. All
+     * status-code exceptions api-base ships carry the context.
      *
      * @param statusCode The HTTP status code to handle
      * @param exceptionClass The exception class to instantiate when this status code is received
@@ -437,15 +443,20 @@ public abstract class ApiClient {
             }
 
             int statusCode = httpResponse.statusCode();
+            Map<String, String> responseHeaders = ApiErrorContext.fromHeaders(httpResponse.headers());
             if (statusCode == 200) {
                 if (request.isBinaryResponse()) {
                     byte[] bodyBytes = (byte[]) httpResponse.body();
                     context.setResponseBytes(bodyBytes);
-                    return request.createResponse(bodyBytes);
+                    U response = request.createResponse(bodyBytes);
+                    response.setResponseHeaders(responseHeaders);
+                    return response;
                 } else {
                     String bodyString = (String) httpResponse.body();
                     context.setResponseBody(bodyString);
-                    return request.createResponse(bodyString);
+                    U response = request.createResponse(bodyString);
+                    response.setResponseHeaders(responseHeaders);
+                    return response;
                 }
             }
 
@@ -461,12 +472,13 @@ public abstract class ApiClient {
                 bodySnippet = respString;
             }
 
+            ApiErrorContext errorContext = new ApiErrorContext(statusCode, bodySnippet, responseHeaders);
             StatusCodeExceptionRegistration reg = statusCodeExceptions.get(statusCode);
             if (reg != null) {
-                throw createException(reg, bodySnippet);
+                throw createException(reg, bodySnippet, errorContext);
             }
 
-            throw new ApiClientException("Unexpected HTTP status " + statusCode + " - " + bodySnippet);
+            throw new ApiClientException("Unexpected HTTP status " + statusCode + " - " + bodySnippet, errorContext);
 
         } catch (java.util.concurrent.CancellationException cex) {
             // CompletableFuture was canceled => graceful cancellation
@@ -493,8 +505,19 @@ public abstract class ApiClient {
         }
     }
 
-    private RuntimeException createException(StatusCodeExceptionRegistration reg, String bodySnippet) {
-        String errorMsg = reg.message + ": " + bodySnippet;
+    private RuntimeException createException(StatusCodeExceptionRegistration reg, String messageSnippet,
+                                             ApiErrorContext errorContext) {
+        String errorMsg = reg.message + ": " + messageSnippet;
+        // Preferred path: the registered class carries the error context. A class without
+        // such a constructor (registered by a client library compiled against api-base
+        // before 2.3.0) still receives the composed message.
+        try {
+            return reg.exceptionClass
+                    .getConstructor(String.class, ApiErrorContext.class)
+                    .newInstance(errorMsg, errorContext);
+        } catch (ReflectiveOperationException ignored) {
+            // fall through to the message-only constructor
+        }
         try {
             return reg.exceptionClass.getConstructor(String.class).newInstance(errorMsg);
         } catch (NoSuchMethodException
@@ -564,6 +587,7 @@ public abstract class ApiClient {
             }
 
             long durationOfNextSleep = calculateNextSleep(settings.getInitialDelayMs());
+            durationOfNextSleep = maybeAdjustSleepForRetryAfter(durationOfNextSleep, latestException);
             durationOfNextSleep = maybeAdjustSleepForFinalRetry(maxDurationSeconds, durationOfNextSleep, remainingMs);
             applySleep(durationOfNextSleep, remainingMs);
         }
@@ -654,6 +678,72 @@ public abstract class ApiClient {
     }
 
     /**
+     * Extends a backoff sleep so it honors a server-sent {@code Retry-After} header.
+     * <p>
+     * Only applied when the retry policy asks for it
+     * ({@link ApiClientSettings#setHonorRetryAfter(boolean)}); the server-provided delay
+     * only ever extends the calculated exponential delay, never shortens it. The header is
+     * read from the {@link ApiErrorContext} of the last retryable exception, so a class
+     * registered without a {@code (String, ApiErrorContext)} constructor has nothing to
+     * honor.
+     *
+     * @param delayMs The calculated backoff delay in milliseconds
+     * @param exception The last retryable exception, or null
+     * @return The possibly extended delay in milliseconds
+     * @since 2.3.0
+     */
+    protected long maybeAdjustSleepForRetryAfter(long delayMs, Throwable exception) {
+        if (!settings.isHonorRetryAfter()) {
+            return delayMs;
+        }
+        Long retryAfterMs = retryAfterMs(exception);
+        return retryAfterMs == null ? delayMs : Math.max(delayMs, retryAfterMs);
+    }
+
+    /**
+     * Reads and parses the {@code Retry-After} header from the error context of the given
+     * exception. Accepts both documented forms: delta-seconds and the HTTP-date form
+     * ({@code IMF-fixdate}, e.g. {@code Fri, 31 Dec 1999 23:59:59 GMT}). An HTTP-date in
+     * the past answers 0 (retry immediately); an absent, unparsable or negative value
+     * answers null (nothing to honor).
+     *
+     * @param exception The exception to read the header from, or null
+     * @return The delay in milliseconds, or null when there is none to honor
+     * @since 2.3.0
+     */
+    protected static Long retryAfterMs(Throwable exception) {
+        ApiErrorContext errorContext = ApiErrorContext.of(exception);
+        if (errorContext == null) {
+            return null;
+        }
+        return parseRetryAfterMs(errorContext.header("Retry-After"));
+    }
+
+    private static Long parseRetryAfterMs(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        try {
+            long seconds = Long.parseLong(trimmed);
+            return seconds < 0 ? null : seconds * 1000L;
+        } catch (NumberFormatException notDeltaSeconds) {
+            // fall through to the HTTP-date form
+        }
+        try {
+            java.time.ZonedDateTime when = java.time.ZonedDateTime.parse(
+                    trimmed, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME);
+            long ms = java.time.Duration.between(java.time.Instant.now(), when.toInstant()).toMillis();
+            return ms < 0 ? 0L : ms;
+        } catch (java.time.DateTimeException notHttpDate) {
+            return null;
+        }
+    }
+
+    /**
      * Sleeps for 'delayMs', in case there is enough time left.
      * @param delayMs The time to sleep, in milliseconds
      * @param remainingMs The time remaining before the request times out, in milliseconds
@@ -719,7 +809,10 @@ public abstract class ApiClient {
      * It can be due to either rate limiting (too many requests per time window) or quota limits
      * (exceeding the allowed number of requests or data volume).
      */
-    public static class HTTP_429_RateLimitOrQuotaException extends RuntimeException {
+    public static class HTTP_429_RateLimitOrQuotaException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Type of rate limit that was exceeded.
          */
@@ -742,6 +835,7 @@ public abstract class ApiClient {
          */
         public HTTP_429_RateLimitOrQuotaException(String message) {
             super(message);
+            this.apiErrorContext = null;
             this.type = ExceptionType.Unknown;
         }
 
@@ -753,6 +847,7 @@ public abstract class ApiClient {
          */
         public HTTP_429_RateLimitOrQuotaException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
             this.type = ExceptionType.RateLimit;
         }
 
@@ -773,6 +868,28 @@ public abstract class ApiClient {
         public ExceptionType getType() {
             return type;
         }
+        /**
+         * Creates a new HTTP_429_RateLimitOrQuotaException with the HTTP error context of the failed exchange.
+         *
+         * @param message The detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public HTTP_429_RateLimitOrQuotaException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
+        }
+
     }
 
     /**
@@ -782,7 +899,10 @@ public abstract class ApiClient {
      * due to something that is perceived to be a client error (e.g., malformed request syntax,
      * invalid request message framing, or deceptive request routing).
      */
-    public static class HTTP_400_RequestRejectedException extends RuntimeException {
+    public static class HTTP_400_RequestRejectedException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Creates a new HTTP 400 Bad Request exception.
          *
@@ -790,6 +910,7 @@ public abstract class ApiClient {
          */
         public HTTP_400_RequestRejectedException(String message) {
             super(message);
+            this.apiErrorContext = null;
         }
 
         /**
@@ -800,7 +921,30 @@ public abstract class ApiClient {
          */
         public HTTP_400_RequestRejectedException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
         }
+        /**
+         * Creates a new HTTP_400_RequestRejectedException with the HTTP error context of the failed exchange.
+         *
+         * @param message The detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public HTTP_400_RequestRejectedException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
+        }
+
     }
 
     /**
@@ -810,7 +954,10 @@ public abstract class ApiClient {
      * authentication credentials for the target resource. The server generating a 401 response
      * MUST send a WWW-Authenticate header field containing at least one challenge.
      */
-    public static class HTTP_401_AuthorizationException extends RuntimeException {
+    public static class HTTP_401_AuthorizationException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Creates a new HTTP 401 Unauthorized exception.
          *
@@ -818,6 +965,7 @@ public abstract class ApiClient {
          */
         public HTTP_401_AuthorizationException(String message) {
             super(message);
+            this.apiErrorContext = null;
         }
 
         /**
@@ -828,7 +976,30 @@ public abstract class ApiClient {
          */
         public HTTP_401_AuthorizationException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
         }
+        /**
+         * Creates a new HTTP_401_AuthorizationException with the HTTP error context of the failed exchange.
+         *
+         * @param message The detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public HTTP_401_AuthorizationException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
+        }
+
     }
 
     /**
@@ -839,7 +1010,10 @@ public abstract class ApiClient {
      * convention exists. Some APIs use this status code to indicate that the account has
      * insufficient funds or requires a subscription upgrade.
      */
-    public static class HTTP_402_PaymentRequiredException extends RuntimeException {
+    public static class HTTP_402_PaymentRequiredException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Creates a new HTTP 402 Payment Required exception.
          *
@@ -847,6 +1021,7 @@ public abstract class ApiClient {
          */
         public HTTP_402_PaymentRequiredException(String message) {
             super(message);
+            this.apiErrorContext = null;
         }
 
         /**
@@ -857,7 +1032,30 @@ public abstract class ApiClient {
          */
         public HTTP_402_PaymentRequiredException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
         }
+        /**
+         * Creates a new HTTP_402_PaymentRequiredException with the HTTP error context of the failed exchange.
+         *
+         * @param message The detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public HTTP_402_PaymentRequiredException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
+        }
+
     }
 
     /**
@@ -869,7 +1067,10 @@ public abstract class ApiClient {
      * the client's identity is known to the server but the authenticated user doesn't have
      * permission to access the requested resource.
      */
-    public static class HTTP_403_PermissionDeniedException extends RuntimeException {
+    public static class HTTP_403_PermissionDeniedException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Creates a new HTTP 403 Forbidden exception.
          *
@@ -877,6 +1078,7 @@ public abstract class ApiClient {
          */
         public HTTP_403_PermissionDeniedException(String message) {
             super(message);
+            this.apiErrorContext = null;
         }
 
         /**
@@ -887,7 +1089,30 @@ public abstract class ApiClient {
          */
         public HTTP_403_PermissionDeniedException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
         }
+        /**
+         * Creates a new HTTP_403_PermissionDeniedException with the HTTP error context of the failed exchange.
+         *
+         * @param message The detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public HTTP_403_PermissionDeniedException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
+        }
+
     }
 
     /**
@@ -898,7 +1123,10 @@ public abstract class ApiClient {
      * is cacheable by default; i.e., unless otherwise indicated by the method definition or
      * explicit cache controls.
      */
-    public static class HTTP_404_NotFoundException extends RuntimeException {
+    public static class HTTP_404_NotFoundException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Creates a new HTTP 404 Not Found exception.
          *
@@ -906,6 +1134,7 @@ public abstract class ApiClient {
          */
         public HTTP_404_NotFoundException(String message) {
             super(message);
+            this.apiErrorContext = null;
         }
 
         /**
@@ -916,7 +1145,30 @@ public abstract class ApiClient {
          */
         public HTTP_404_NotFoundException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
         }
+        /**
+         * Creates a new HTTP_404_NotFoundException with the HTTP error context of the failed exchange.
+         *
+         * @param message The detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public HTTP_404_NotFoundException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
+        }
+
     }
 
     /**
@@ -927,7 +1179,10 @@ public abstract class ApiClient {
      * unable to process the contained instructions. This is commonly used for validation
      * errors where the request is well-formed but contains semantic errors.
      */
-    public static class HTTP_422_UnprocessableEntityException extends RuntimeException {
+    public static class HTTP_422_UnprocessableEntityException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Creates a new HTTP 422 Unprocessable Entity exception.
          *
@@ -935,6 +1190,7 @@ public abstract class ApiClient {
          */
         public HTTP_422_UnprocessableEntityException(String message) {
             super(message);
+            this.apiErrorContext = null;
         }
 
         /**
@@ -945,7 +1201,30 @@ public abstract class ApiClient {
          */
         public HTTP_422_UnprocessableEntityException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
         }
+        /**
+         * Creates a new HTTP_422_UnprocessableEntityException with the HTTP error context of the failed exchange.
+         *
+         * @param message The detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public HTTP_422_UnprocessableEntityException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
+        }
+
     }
 
     /**
@@ -955,7 +1234,10 @@ public abstract class ApiClient {
      * that prevented it from fulfilling the request. This is a generic "catch-all"
      * response when the server encounters an error that doesn't fit other status codes.
      */
-    public static class HTTP_500_ServerErrorException extends RuntimeException {
+    public static class HTTP_500_ServerErrorException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Creates a new HTTP 500 Internal Server Error exception.
          *
@@ -963,6 +1245,7 @@ public abstract class ApiClient {
          */
         public HTTP_500_ServerErrorException(String message) {
             super(message);
+            this.apiErrorContext = null;
         }
 
         /**
@@ -973,7 +1256,30 @@ public abstract class ApiClient {
          */
         public HTTP_500_ServerErrorException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
         }
+        /**
+         * Creates a new HTTP_500_ServerErrorException with the HTTP error context of the failed exchange.
+         *
+         * @param message The detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public HTTP_500_ServerErrorException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
+        }
+
     }
 
     /**
@@ -984,7 +1290,10 @@ public abstract class ApiClient {
      * alleviated after some delay. The server MAY send a Retry-After header field to
      * suggest an appropriate amount of time for the client to wait before retrying.
      */
-    public static class HTTP_503_ServerUnavailableException extends RuntimeException {
+    public static class HTTP_503_ServerUnavailableException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Creates a new HTTP 503 Service Unavailable exception.
          *
@@ -992,6 +1301,7 @@ public abstract class ApiClient {
          */
         public HTTP_503_ServerUnavailableException(String message) {
             super(message);
+            this.apiErrorContext = null;
         }
 
         /**
@@ -1002,7 +1312,30 @@ public abstract class ApiClient {
          */
         public HTTP_503_ServerUnavailableException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
         }
+        /**
+         * Creates a new HTTP_503_ServerUnavailableException with the HTTP error context of the failed exchange.
+         *
+         * @param message The detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public HTTP_503_ServerUnavailableException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
+        }
+
     }
 
     /**
@@ -1013,7 +1346,10 @@ public abstract class ApiClient {
      * in order to complete the request. This typically indicates a network connectivity
      * issue between servers rather than a problem with the client's request.
      */
-    public static class HTTP_504_ServerTimeoutException extends RuntimeException {
+    public static class HTTP_504_ServerTimeoutException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Creates a new HTTP 504 Gateway Timeout exception.
          *
@@ -1021,6 +1357,7 @@ public abstract class ApiClient {
          */
         public HTTP_504_ServerTimeoutException(String message) {
             super(message);
+            this.apiErrorContext = null;
         }
 
         /**
@@ -1031,7 +1368,30 @@ public abstract class ApiClient {
          */
         public HTTP_504_ServerTimeoutException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
         }
+        /**
+         * Creates a new HTTP_504_ServerTimeoutException with the HTTP error context of the failed exchange.
+         *
+         * @param message The detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public HTTP_504_ServerTimeoutException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
+        }
+
     }
 
     /**
@@ -1050,7 +1410,10 @@ public abstract class ApiClient {
      * which represent specific HTTP error responses from the server. This exception indicates
      * that the client encountered an issue before receiving a valid server response.
      */
-    public static class ApiClientException extends RuntimeException {
+    public static class ApiClientException extends RuntimeException implements ApiErrorContextAware {
+        /** The HTTP error context of the exchange that caused this exception, or {@code null}. */
+        private final ApiErrorContext apiErrorContext;
+
         /**
          * Creates a new ApiClientException with the specified detail message.
          *
@@ -1058,6 +1421,7 @@ public abstract class ApiClient {
          */
         public ApiClientException(String message) {
             super(message);
+            this.apiErrorContext = null;
         }
 
         /**
@@ -1068,6 +1432,31 @@ public abstract class ApiClient {
          */
         public ApiClientException(String message, Throwable cause) {
             super(message, cause);
+            this.apiErrorContext = null;
+        }
+
+        /**
+         * Creates a new ApiClientException with the specified detail message and the HTTP
+         * error context of the failed exchange (e.g. for a status code no exception was
+         * registered for).
+         *
+         * @param message the detail message (which is saved for later retrieval by the getMessage() method)
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public ApiClientException(String message, ApiErrorContext apiErrorContext) {
+            super(message);
+            this.apiErrorContext = apiErrorContext;
+        }
+
+        /**
+         * Returns the HTTP error context of the exchange that caused this exception, or
+         * {@code null} when the exception was created without one.
+         *
+         * @return The error context, or {@code null}
+         */
+        @Override
+        public ApiErrorContext getApiErrorContext() {
+            return apiErrorContext;
         }
     }
 
@@ -1175,6 +1564,17 @@ public abstract class ApiClient {
         public StreamingException(String message, Throwable cause) {
             super(message, cause);
         }
+
+        /**
+         * Creates a new StreamingException with the specified detail message and the HTTP
+         * error context of the failed exchange.
+         *
+         * @param message the detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public StreamingException(String message, ApiErrorContext apiErrorContext) {
+            super(message, apiErrorContext);
+        }
     }
 
     /**
@@ -1205,6 +1605,17 @@ public abstract class ApiClient {
          */
         public StreamingConnectionException(String message, Throwable cause) {
             super(message, cause);
+        }
+
+        /**
+         * Creates a new StreamingConnectionException with the specified detail message and
+         * the HTTP error context of the failed exchange.
+         *
+         * @param message the detail message
+         * @param apiErrorContext The status code, response body and response headers of the failed exchange
+         */
+        public StreamingConnectionException(String message, ApiErrorContext apiErrorContext) {
+            super(message, apiErrorContext);
         }
     }
 
@@ -1410,6 +1821,7 @@ public abstract class ApiClient {
                 // Create response with streaming context - use empty JSON for streaming
                 ApiResponse response = request.createResponse("{}");
                 response.setStreamingContext(streamingContext);
+                response.setResponseHeaders(context.getResponseHeaders());
                 
                 return (ApiResponse<?>) response;
                 
@@ -1468,6 +1880,7 @@ public abstract class ApiClient {
                 // Create response with streaming context - use empty JSON for streaming
                 ApiResponse response = request.createResponse("{}");
                 response.setStreamingContext(streamingContext);
+                response.setResponseHeaders(context.getResponseHeaders());
                 
                 return (ApiResponse<?>) response;
                 
@@ -1585,11 +1998,13 @@ public abstract class ApiClient {
 
                 // Handle non-200 status codes with full error details
                 String errorMessage = "Streaming request failed with status " + statusCode + ": " + errorBody;
+                ApiErrorContext errorContext = new ApiErrorContext(statusCode, errorBody,
+                        ApiErrorContext.fromHeaders(response.headers()));
                 StatusCodeExceptionRegistration reg = statusCodeExceptions.get(statusCode);
                 if (reg != null) {
-                    throw createException(reg, errorMessage);
+                    throw createException(reg, errorMessage, errorContext);
                 }
-                throw new StreamingConnectionException(errorMessage);
+                throw new StreamingConnectionException(errorMessage, errorContext);
             }
             
             // Process the streaming response
@@ -1647,6 +2062,7 @@ public abstract class ApiClient {
         StreamingResult<U> result = new StreamingResult<>();
         boolean streamCompleted = false;
         int linesProcessed = 0;
+        context.setResponseHeaders(ApiErrorContext.fromHeaders(response.headers()));
         
         handler.onStreamStart();
         
@@ -1798,6 +2214,7 @@ public abstract class ApiClient {
             }
             
             long durationOfNextSleep = calculateNextSleep(settings.getInitialDelayMs());
+            durationOfNextSleep = maybeAdjustSleepForRetryAfter(durationOfNextSleep, latestException);
             durationOfNextSleep = maybeAdjustSleepForFinalRetry(maxDurationSeconds, durationOfNextSleep, remainingMs);
             
             try {

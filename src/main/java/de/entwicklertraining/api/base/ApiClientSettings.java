@@ -31,6 +31,14 @@ public class ApiClientSettings {
     private boolean useJitter = true;
 
     /**
+     * Whether the retry backoff honors a server-sent {@code Retry-After} header (on the
+     * error response of the failed attempt) by sleeping at least as long as the server
+     * asked for. Off by default; enable it per client when the API documents
+     * {@code Retry-After} (e.g. rate limits and in-flight budget rejections).
+     */
+    private boolean honorRetryAfter = false;
+
+    /**
      * Minimum time in milliseconds remaining before timeout to attempt a final retry.
      * This allows for one last attempt if there's enough time left.
      */
@@ -66,6 +74,7 @@ public class ApiClientSettings {
         this.initialDelayMs = builder.initialDelayMs;
         this.exponentialBase = builder.exponentialBase;
         this.useJitter = builder.useJitter;
+        this.honorRetryAfter = builder.honorRetryAfter;
         this.minSleepDurationForFinalRetryInSeconds = builder.minSleepDurationForFinalRetryInSeconds;
         this.maxExecutionTimeForFinalRetryInSeconds = builder.maxExecutionTimeForFinalRetryInSeconds;
         this.beforeSendAction = builder.beforeSendAction;
@@ -83,6 +92,7 @@ public class ApiClientSettings {
                 .initialDelayMs(this.initialDelayMs)
                 .exponentialBase(this.exponentialBase)
                 .useJitter(this.useJitter)
+                .honorRetryAfter(this.honorRetryAfter)
                 .minSleepDurationForFinalRetryInSeconds(this.minSleepDurationForFinalRetryInSeconds)
                 .maxExecutionTimeForFinalRetryInSeconds(this.maxExecutionTimeForFinalRetryInSeconds)
                 .beforeSend(this.beforeSendAction);
@@ -174,6 +184,34 @@ public class ApiClientSettings {
     }
 
     /**
+     * Checks whether the retry backoff honors a server-sent {@code Retry-After} header.
+     *
+     * @return true when {@code Retry-After} extends the backoff delay, false otherwise
+     * @since 2.3.0
+     */
+    public boolean isHonorRetryAfter() {
+        return honorRetryAfter;
+    }
+
+    /**
+     * Enables or disables honoring a server-sent {@code Retry-After} header in the retry
+     * backoff. When enabled and the error response of the failed attempt carries a valid
+     * {@code Retry-After} (delta-seconds or HTTP-date), the sleep before the next attempt
+     * is at least that long - the exponential delay is only extended, never shortened.
+     * Unparsable or negative values are ignored. The resulting sleep is bounded only by
+     * the request's maximum execution time when one is set, so a server asking for a very
+     * long delay can stall a retrying call for as long.
+     *
+     * @param honorRetryAfter true to honor {@code Retry-After}, false to ignore it
+     * @return This instance for method chaining
+     * @since 2.3.0
+     */
+    public ApiClientSettings setHonorRetryAfter(boolean honorRetryAfter) {
+        this.honorRetryAfter = honorRetryAfter;
+        return this;
+    }
+
+    /**
      * Gets the minimum duration in seconds required to attempt a final retry.
      *
      * @return The minimum duration in seconds
@@ -255,6 +293,7 @@ public class ApiClientSettings {
         private long initialDelayMs = 1000;
         private double exponentialBase = 2.0;
         private boolean useJitter = true;
+        private boolean honorRetryAfter = false;
         private int minSleepDurationForFinalRetryInSeconds = 500;
         private int maxExecutionTimeForFinalRetryInSeconds = 60;
         private Consumer<ApiRequest<?>> beforeSendAction;
@@ -305,6 +344,19 @@ public class ApiClientSettings {
          */
         public Builder useJitter(boolean useJitter) {
             this.useJitter = useJitter;
+            return this;
+        }
+
+        /**
+         * Enables or disables honoring a server-sent {@code Retry-After} header in the
+         * retry backoff (see {@link ApiClientSettings#setHonorRetryAfter(boolean)}).
+         *
+         * @param honorRetryAfter Whether to honor {@code Retry-After}
+         * @return This builder for method chaining
+         * @since 2.3.0
+         */
+        public Builder honorRetryAfter(boolean honorRetryAfter) {
+            this.honorRetryAfter = honorRetryAfter;
             return this;
         }
 
