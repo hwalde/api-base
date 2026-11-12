@@ -9,7 +9,7 @@ All notable changes to this project will be documented in this file.
 - **NEW**: Opt-in `Retry-After` backoff - `ApiClientSettings.builder().honorRetryAfter(true)` (default off) lets the retry backoff honor a server-sent `Retry-After` header: the sleep before the next attempt is at least as long as the server asked for (delta-seconds or the HTTP-date form; unparsable/negative values ignored; an HTTP-date in the past means retry immediately; huge delta-seconds saturate instead of overflowing). The server-provided delay only ever extends the calculated exponential delay and is clamped to the new `maxRetryAfterMs` ceiling (default 5 minutes, `ApiClientSettings.builder().maxRetryAfterMs(...)`), so a hostile or misconfigured server cannot park a retrying thread indefinitely; the request's maximum execution time bounds the sleep further when one is set. Both the regular and the streaming retry loop consult it.
 
 ### Fixed
-- **FIX**: the Maven build now actually runs the JUnit 5 test suite - without a surefire 3.x pin Maven silently used an ancient surefire that ignores JUnit 5 and reported "Tests run: 0" as success, so the tests present in this repository never ran. The new pin (`maven-surefire-plugin` 3.2.5) makes the full suite run (76 tests green).
+- **FIX**: the Maven build now actually runs the JUnit 5 test suite - without a surefire 3.x pin Maven silently used an ancient surefire that ignores JUnit 5 and reported "Tests run: 0" as success, so the tests present in this repository never ran. The new pin (`maven-surefire-plugin` 3.2.5) makes the full suite run (79 tests green).
 
 ## [2.2.2] - 2026-04-01
 ### Added
