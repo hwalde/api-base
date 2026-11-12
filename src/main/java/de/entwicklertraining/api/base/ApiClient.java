@@ -682,10 +682,12 @@ public abstract class ApiClient {
      * <p>
      * Only applied when the retry policy asks for it
      * ({@link ApiClientSettings#setHonorRetryAfter(boolean)}); the server-provided delay
-     * only ever extends the calculated exponential delay, never shortens it. The header is
-     * read from the {@link ApiErrorContext} of the last retryable exception, so a class
-     * registered without a {@code (String, ApiErrorContext)} constructor has nothing to
-     * honor.
+     * only ever extends the calculated exponential delay, never shortens it, and is
+     * clamped to {@link ApiClientSettings#setMaxRetryAfterMs(long)} so a hostile or
+     * misconfigured server cannot park the retrying thread indefinitely. The header is
+     * read from the {@link ApiErrorContext} of the last retryable exception (walking its
+     * cause chain), so a class registered without a {@code (String, ApiErrorContext)}
+     * constructor has nothing to honor.
      *
      * @param delayMs The calculated backoff delay in milliseconds
      * @param exception The last retryable exception, or null
@@ -697,7 +699,11 @@ public abstract class ApiClient {
             return delayMs;
         }
         Long retryAfterMs = retryAfterMs(exception);
-        return retryAfterMs == null ? delayMs : Math.max(delayMs, retryAfterMs);
+        if (retryAfterMs == null) {
+            return delayMs;
+        }
+        long honoredMs = Math.min(retryAfterMs, settings.getMaxRetryAfterMs());
+        return Math.max(delayMs, honoredMs);
     }
 
     /**
@@ -729,7 +735,11 @@ public abstract class ApiClient {
         }
         try {
             long seconds = Long.parseLong(trimmed);
-            return seconds < 0 ? null : seconds * 1000L;
+            if (seconds < 0) {
+                return null;
+            }
+            // saturate instead of overflowing into a tiny (or negative) sleep
+            return seconds > Long.MAX_VALUE / 1000L ? Long.MAX_VALUE : seconds * 1000L;
         } catch (NumberFormatException notDeltaSeconds) {
             // fall through to the HTTP-date form
         }

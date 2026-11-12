@@ -59,14 +59,43 @@ public record ApiErrorContext(int statusCode,
 
     /**
      * Returns the error context a transport recorded on the given throwable, or
-     * {@code null} when the throwable carries none (raised without an HTTP exchange, or
-     * created by hand).
+     * {@code null} when none is found. Walks the cause chain (capped at 20 hops), so a
+     * transport exception wrapped by streaming or async layers - which often carries no
+     * context of its own - still answers with the context of the wrapped error.
      *
      * @param throwable the exception to read the context from
      * @return the recorded context, or {@code null}
      */
     public static ApiErrorContext of(Throwable throwable) {
-        return throwable instanceof ApiErrorContextAware aware ? aware.getApiErrorContext() : null;
+        Throwable current = throwable;
+        for (int depth = 0; current != null && depth < 20; depth++) {
+            if (current instanceof ApiErrorContextAware aware) {
+                ApiErrorContext context = aware.getApiErrorContext();
+                if (context != null) {
+                    return context;
+                }
+            }
+            Throwable cause = current.getCause();
+            if (cause == current) {
+                break;
+            }
+            current = cause;
+        }
+        return null;
+    }
+
+    /**
+     * Compact form for logs: the status code, the header names and the body length - the
+     * body and the header values themselves are deliberately not dumped (an error body
+     * and headers like {@code Set-Cookie} or {@code WWW-Authenticate} are not for logs).
+     *
+     * @return the compact description
+     */
+    @Override
+    public String toString() {
+        return "ApiErrorContext[statusCode=" + statusCode
+                + ", responseHeaders=" + responseHeaders.keySet()
+                + ", responseBody=(" + (responseBody == null ? 0 : responseBody.length()) + " chars)]";
     }
 
     /**

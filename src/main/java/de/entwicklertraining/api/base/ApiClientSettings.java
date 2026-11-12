@@ -39,6 +39,14 @@ public class ApiClientSettings {
     private boolean honorRetryAfter = false;
 
     /**
+     * Ceiling for a server-provided {@code Retry-After} delay the backoff will honor, in
+     * milliseconds. A hostile or misconfigured server must not be able to park a
+     * retrying thread indefinitely; without a request maximum execution time this cap is
+     * the only bound on the sleep.
+     */
+    private long maxRetryAfterMs = 300_000; // 5 minutes
+
+    /**
      * Minimum time in milliseconds remaining before timeout to attempt a final retry.
      * This allows for one last attempt if there's enough time left.
      */
@@ -75,6 +83,7 @@ public class ApiClientSettings {
         this.exponentialBase = builder.exponentialBase;
         this.useJitter = builder.useJitter;
         this.honorRetryAfter = builder.honorRetryAfter;
+        this.maxRetryAfterMs = builder.maxRetryAfterMs;
         this.minSleepDurationForFinalRetryInSeconds = builder.minSleepDurationForFinalRetryInSeconds;
         this.maxExecutionTimeForFinalRetryInSeconds = builder.maxExecutionTimeForFinalRetryInSeconds;
         this.beforeSendAction = builder.beforeSendAction;
@@ -93,6 +102,7 @@ public class ApiClientSettings {
                 .exponentialBase(this.exponentialBase)
                 .useJitter(this.useJitter)
                 .honorRetryAfter(this.honorRetryAfter)
+                .maxRetryAfterMs(this.maxRetryAfterMs)
                 .minSleepDurationForFinalRetryInSeconds(this.minSleepDurationForFinalRetryInSeconds)
                 .maxExecutionTimeForFinalRetryInSeconds(this.maxExecutionTimeForFinalRetryInSeconds)
                 .beforeSend(this.beforeSendAction);
@@ -198,9 +208,9 @@ public class ApiClientSettings {
      * backoff. When enabled and the error response of the failed attempt carries a valid
      * {@code Retry-After} (delta-seconds or HTTP-date), the sleep before the next attempt
      * is at least that long - the exponential delay is only extended, never shortened.
-     * Unparsable or negative values are ignored. The resulting sleep is bounded only by
-     * the request's maximum execution time when one is set, so a server asking for a very
-     * long delay can stall a retrying call for as long.
+     * Unparsable or negative values are ignored; huge values saturate instead of
+     * overflowing and are clamped to {@link #setMaxRetryAfterMs(long)}. The resulting
+     * sleep is bounded further by the request's maximum execution time when one is set.
      *
      * @param honorRetryAfter true to honor {@code Retry-After}, false to ignore it
      * @return This instance for method chaining
@@ -208,6 +218,31 @@ public class ApiClientSettings {
      */
     public ApiClientSettings setHonorRetryAfter(boolean honorRetryAfter) {
         this.honorRetryAfter = honorRetryAfter;
+        return this;
+    }
+
+    /**
+     * Gets the ceiling for a server-provided {@code Retry-After} delay the backoff will
+     * honor, in milliseconds.
+     *
+     * @return The ceiling in milliseconds
+     * @since 2.3.0
+     */
+    public long getMaxRetryAfterMs() {
+        return maxRetryAfterMs;
+    }
+
+    /**
+     * Sets the ceiling for a server-provided {@code Retry-After} delay the backoff will
+     * honor (only relevant with {@link #setHonorRetryAfter(boolean)} enabled). The
+     * request's maximum execution time bounds the sleep further when one is set.
+     *
+     * @param maxRetryAfterMs The ceiling in milliseconds (must be >= 0)
+     * @return This instance for method chaining
+     * @since 2.3.0
+     */
+    public ApiClientSettings setMaxRetryAfterMs(long maxRetryAfterMs) {
+        this.maxRetryAfterMs = maxRetryAfterMs;
         return this;
     }
 
@@ -294,6 +329,7 @@ public class ApiClientSettings {
         private double exponentialBase = 2.0;
         private boolean useJitter = true;
         private boolean honorRetryAfter = false;
+        private long maxRetryAfterMs = 300_000;
         private int minSleepDurationForFinalRetryInSeconds = 500;
         private int maxExecutionTimeForFinalRetryInSeconds = 60;
         private Consumer<ApiRequest<?>> beforeSendAction;
@@ -357,6 +393,19 @@ public class ApiClientSettings {
          */
         public Builder honorRetryAfter(boolean honorRetryAfter) {
             this.honorRetryAfter = honorRetryAfter;
+            return this;
+        }
+
+        /**
+         * Sets the ceiling for a server-provided {@code Retry-After} delay the backoff
+         * will honor (see {@link ApiClientSettings#setMaxRetryAfterMs(long)}).
+         *
+         * @param maxRetryAfterMs The ceiling in milliseconds
+         * @return This builder for method chaining
+         * @since 2.3.0
+         */
+        public Builder maxRetryAfterMs(long maxRetryAfterMs) {
+            this.maxRetryAfterMs = maxRetryAfterMs;
             return this;
         }
 

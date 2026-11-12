@@ -257,6 +257,50 @@ public class ApiErrorContextAndResponseHeadersTest {
         assertEquals(1000L, honoring.maybeAdjustSleepForRetryAfter(1000L, null));
     }
 
+    @Test
+    @DisplayName("of() walks the cause chain to the wrapped transport exception")
+    void ofWalksTheCauseChain() {
+        RuntimeException inner = exceptionWithRetryAfter("7");
+
+        assertEquals(7000L, ApiClient.retryAfterMs(
+                        new ApiClient.StreamingException("Streaming execution failed", inner)),
+                "the streaming layers wrap the transport exception in (String, Throwable)");
+        assertEquals(7000L, ApiClient.retryAfterMs(
+                new java.util.concurrent.CompletionException(inner)));
+        assertEquals(7000L, ApiClient.retryAfterMs(
+                new ApiClient.StreamingException("outer",
+                        new ApiClient.StreamingException("inner", inner))),
+                "nested wrappers resolve too");
+        assertNull(ApiClient.retryAfterMs(
+                new ApiClient.StreamingException("outer", new RuntimeException("no ctx"))));
+    }
+
+    @Test
+    @DisplayName("a huge Retry-After saturates and is clamped to maxRetryAfterMs")
+    void retryAfterIsCapped() {
+        ApiClient honoring = new TestApiClient(true);
+        RuntimeException huge = exceptionWithRetryAfter("9000000000000000000");
+
+        // overflow-safe parse, then clamped to the default 5-minute ceiling
+        assertEquals(300_000L, honoring.maybeAdjustSleepForRetryAfter(1000L, huge));
+
+        ApiClient custom = new TestApiClient(ApiClientSettings.builder()
+                .maxRetries(1).initialDelayMs(10).honorRetryAfter(true).maxRetryAfterMs(1_000).build());
+        assertEquals(1_000L, custom.maybeAdjustSleepForRetryAfter(100L,
+                exceptionWithRetryAfter("3600")), "a smaller ceiling wins");
+    }
+
+    @Test
+    @DisplayName("the ApiErrorContext toString does not dump the body or header values")
+    void toStringDoesNotLeakBody() {
+        ApiErrorContext ctx = new ApiErrorContext(429, ERROR_BODY,
+                Map.of("Set-Cookie", "session=secret"));
+        String text = ctx.toString();
+        assertFalse(text.contains("secret"), "header values stay out of logs");
+        assertFalse(text.contains("metadata"), "the body stays out of logs");
+        assertTrue(text.contains("429"));
+    }
+
     // ------------------------------------------------------------------- test doubles
 
     private static RuntimeException exceptionWithRetryAfter(String retryAfter) {
@@ -315,11 +359,15 @@ public class ApiErrorContextAndResponseHeadersTest {
 
     private static class TestApiClient extends ApiClient {
         TestApiClient(boolean honorRetryAfter) {
-            super(ApiClientSettings.builder()
+            this(ApiClientSettings.builder()
                     .maxRetries(1)
                     .initialDelayMs(10)
                     .honorRetryAfter(honorRetryAfter)
                     .build());
+        }
+
+        TestApiClient(ApiClientSettings settings) {
+            super(settings);
             setBaseUrl("http://127.0.0.1:" + port);
         }
 
